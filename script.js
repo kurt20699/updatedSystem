@@ -140,6 +140,22 @@ function createAccuracyCircleGeoJSON(lng, lat, radiusMeters, points = 64) {
     };
 }
 
+// ✅ Applies the current heading to the beam on both the 2D and 3D user
+// markers (if present) via a CSS custom property — cheap, GPU-friendly,
+// and doesn't touch marker position/rotation itself. Called with `null`/
+// undefined is a no-op, so the beam simply keeps its last-known or default
+// (north-up) direction when heading data isn't available.
+function applyUserMarkerHeading(headingDeg) {
+    if (typeof headingDeg !== 'number' || Number.isNaN(headingDeg)) return;
+    const deg = ((headingDeg % 360) + 360) % 360;
+    if (state.userMarker) {
+        state.userMarker.getElement().style.setProperty('--user-heading', `${deg}deg`);
+    }
+    if (map3dState.userMarker) {
+        map3dState.userMarker.getElement().style.setProperty('--user-heading', `${deg}deg`);
+    }
+}
+
 function updateUserLocationMarker(lat, lng, accuracy, options = {}) {
     const { showPopup = false, pan = false } = options;
 
@@ -149,6 +165,7 @@ function updateUserLocationMarker(lat, lng, accuracy, options = {}) {
         el.style.width = '30px';   // matches .user-marker-pulse's size — without this,
         el.style.height = '30px';  // MapLibre can't compute the -50%/-50% centering offset correctly
         el.innerHTML = `
+            <div class="user-marker-beam"></div>
             <div class="user-marker-pulse"></div>
             <div class="user-marker-dot"></div>
         `;
@@ -5026,6 +5043,7 @@ function startNavigationLocationWatch() {
             state.deadReckoning.speed = typeof pos.coords.speed === 'number' ? pos.coords.speed : null;
             state.deadReckoning.heading = typeof pos.coords.heading === 'number' ? pos.coords.heading : null;
             state.deadReckoning.accuracy = accuracy;
+            applyUserMarkerHeading(pos.coords.heading);
             startDeadReckoningLoop();
 
             if (state.currentRoute && state.currentRoute.coordinates && state.currentRoute.coordinates.length) {
@@ -7669,6 +7687,7 @@ function sync3DUserLocationMarker(lat, lng) {
         el.style.width = '30px';
         el.style.height = '30px';
         el.innerHTML = `
+            <div class="user-marker-beam"></div>
             <div class="user-marker-pulse"></div>
             <div class="user-marker-dot"></div>
         `;
@@ -7678,6 +7697,13 @@ function sync3DUserLocationMarker(lat, lng) {
             .addTo(map3dState.map);
     } else {
         map3dState.userMarker.setLngLat([lng, lat]);
+    }
+
+    // ✅ Newly created marker starts with whatever heading is already known
+    // (e.g. switching into 3D mid-navigation), instead of waiting for the
+    // next GPS fix to orient the beam.
+    if (typeof state.deadReckoning?.heading === 'number') {
+        applyUserMarkerHeading(state.deadReckoning.heading);
     }
 }
 

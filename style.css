@@ -1586,6 +1586,33 @@ body.sidebar-open {
     position: relative;
 }
 
+/* Flashlight-style heading beam — sits behind the pulse ring and dot.
+   Direction is driven by the --user-heading custom property (set from JS
+   whenever device/GPS heading is available); it defaults to 0deg (north-up)
+   so the beam still looks intentional when no heading data exists yet. */
+.user-marker-beam {
+    position: absolute;
+    width: 140px;
+    height: 140px;
+    top: -55px;
+    left: -55px;
+    border-radius: 50%;
+    background: conic-gradient(
+        from calc(var(--user-heading, 0deg) - 32deg),
+        rgba(66, 133, 244, 0) 0deg,
+        rgba(66, 133, 244, 0.32) 32deg,
+        rgba(66, 133, 244, 0.12) 50deg,
+        rgba(66, 133, 244, 0) 64deg,
+        rgba(66, 133, 244, 0) 360deg
+    );
+    -webkit-mask-image: radial-gradient(circle at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0.9) 35%, rgba(0,0,0,0) 100%);
+    mask-image: radial-gradient(circle at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0.9) 35%, rgba(0,0,0,0) 100%);
+    pointer-events: none;
+    z-index: 0;
+    transition: background 0.35s ease-out;
+    will-change: background;
+}
+
 .user-marker-pulse {
     position: absolute;
     width: 30px;
