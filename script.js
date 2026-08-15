@@ -204,6 +204,82 @@ function applyUserMarkerHeading(headingDeg, speed) {
     }
 }
 
+// ── Device orientation (compass) — Google-Maps-style live rotation ───────
+// Whenever the compass is actively reporting, it drives the beam directly
+// (physically rotating the phone rotates the cone in real time, standing
+// still or not). GPS heading (pos.coords.heading, wired in
+// startNavigationLocationWatch below) is only used as a fallback when the
+// compass is unsupported, permission was denied, or readings have gone
+// stale — it never fights the compass for control of the beam.
+const compassState = {
+    active: false,          // a deviceorientation listener is currently attached
+    usingAbsoluteEvent: false,
+    supported: false,       // at least one real compass reading has arrived
+    lastUpdate: 0
+};
+
+const COMPASS_STALE_MS = 2000; // GPS heading takes back over if compass goes quiet this long
+
+function handleDeviceOrientation(event) {
+    let heading = null;
+
+    // iOS Safari: webkitCompassHeading is already a true-north compass
+    // reading (0 = north, clockwise) — no conversion needed.
+    if (typeof event.webkitCompassHeading === 'number' && !Number.isNaN(event.webkitCompassHeading)) {
+        heading = event.webkitCompassHeading;
+    }
+    // Android/Chrome: alpha is only a reliable compass heading when the
+    // browser reports it's world-absolute (either via the dedicated
+    // 'deviceorientationabsolute' event, or event.absolute === true on the
+    // regular event). alpha increases counter-clockwise from the device's
+    // reference direction, so it's inverted to get clockwise-from-north.
+    else if (typeof event.alpha === 'number' && !Number.isNaN(event.alpha) &&
+             (event.absolute === true || compassState.usingAbsoluteEvent)) {
+        heading = 360 - event.alpha;
+    }
+
+    if (heading == null) return;
+
+    compassState.supported = true;
+    compassState.lastUpdate = Date.now();
+
+    // No `speed` argument — compass readings should always update the beam,
+    // even while standing perfectly still (unlike noisy GPS heading, which
+    // is gated by MIN_SPEED_FOR_HEADING above).
+    applyUserMarkerHeading(((heading % 360) + 360) % 360);
+}
+
+// ✅ Public entry point — call synchronously from a click/tap handler only.
+// iOS 13+'s DeviceOrientationEvent.requestPermission() must run inside the
+// original user-gesture call stack or Safari silently rejects it, so this
+// is invoked directly at the top of setUserLocation()/navigateToSelected(),
+// never from inside a .then()/await continuation.
+function startCompassTracking() {
+    if (compassState.active) return;
+    if (typeof DeviceOrientationEvent === 'undefined') return;
+
+    const attach = () => {
+        compassState.active = true;
+        if ('ondeviceorientationabsolute' in window) {
+            compassState.usingAbsoluteEvent = true;
+            window.addEventListener('deviceorientationabsolute', handleDeviceOrientation, true);
+        } else {
+            window.addEventListener('deviceorientation', handleDeviceOrientation, true);
+        }
+    };
+
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        // iOS — must prompt; denial/failure just means we keep relying on
+        // GPS heading, which is already wired up as a fallback.
+        DeviceOrientationEvent.requestPermission()
+            .then(response => { if (response === 'granted') attach(); })
+            .catch(() => {});
+    } else {
+        // Android / desktop — no permission prompt required.
+        attach();
+    }
+}
+
 function updateUserLocationMarker(lat, lng, accuracy, options = {}) {
     const { showPopup = false, pan = false } = options;
 
@@ -4961,6 +5037,7 @@ function handleQuickAction(action) {
 }
 
 function startNavigationLocationWatch() {
+    startCompassTracking(); // Google-Maps-style live beam rotation, see below
     if (!navigator.geolocation) return;
 
     if (state.watchId) {
@@ -5091,7 +5168,12 @@ function startNavigationLocationWatch() {
             state.deadReckoning.speed = typeof pos.coords.speed === 'number' ? pos.coords.speed : null;
             state.deadReckoning.heading = typeof pos.coords.heading === 'number' ? pos.coords.heading : null;
             state.deadReckoning.accuracy = accuracy;
-            applyUserMarkerHeading(pos.coords.heading, pos.coords.speed);
+            // Only let GPS heading drive the beam when the compass isn't
+            // actively supplying fresher readings — prevents the two from
+            // fighting over the beam's rotation.
+            if (!compassState.supported || Date.now() - compassState.lastUpdate > COMPASS_STALE_MS) {
+                applyUserMarkerHeading(pos.coords.heading, pos.coords.speed);
+            }
             startDeadReckoningLoop();
 
             if (state.currentRoute && state.currentRoute.coordinates && state.currentRoute.coordinates.length) {
@@ -5182,6 +5264,8 @@ function setUserLocation() {
     // Ignore a repeat tap while a request is already in flight instead of
     // starting a second overlapping watchPosition chain.
     if (btn && btn.disabled) return;
+
+    startCompassTracking(); // fired synchronously from this click so iOS's permission prompt is allowed
 
     if (!navigator.geolocation) {
         showNotification('Geolocation is not supported by your browser', 'error');
