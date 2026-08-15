@@ -1609,7 +1609,10 @@ body.sidebar-open {
     mask-image: radial-gradient(circle at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0.9) 35%, rgba(0,0,0,0) 100%);
     pointer-events: none;
     z-index: 0;
-    transition: background 0.35s ease-out;
+    /* No CSS transition here — the beam's direction is now smoothed frame-
+       by-frame in JS (shortest-path easing), which is what actually
+       prevents jitter/snapping. A CSS transition on top of that would just
+       fight it and add lag. */
     will-change: background;
 }
 

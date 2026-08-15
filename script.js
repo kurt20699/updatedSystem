@@ -140,19 +140,67 @@ function createAccuracyCircleGeoJSON(lng, lat, radiusMeters, points = 64) {
     };
 }
 
-// ✅ Applies the current heading to the beam on both the 2D and 3D user
-// markers (if present) via a CSS custom property — cheap, GPU-friendly,
-// and doesn't touch marker position/rotation itself. Called with `null`/
-// undefined is a no-op, so the beam simply keeps its last-known or default
-// (north-up) direction when heading data isn't available.
-function applyUserMarkerHeading(headingDeg) {
-    if (typeof headingDeg !== 'number' || Number.isNaN(headingDeg)) return;
-    const deg = ((headingDeg % 360) + 360) % 360;
+// ── Heading smoothing — drives the flashlight beam's rotation ────────────
+// Kept as standalone state (not inside the big `state` object) so this is a
+// self-contained addition. `target` is the latest trusted heading; `current`
+// is what's actually being displayed, eased toward `target` every animation
+// frame along the SHORTEST angular path — so crossing 0°/360° (e.g. 350° →
+// 10°) rotates +20°, never spins the "long way around" through 180°.
+const headingAnim = { current: null, target: null, rafId: null };
+
+// GPS heading readings get noisy/unreliable below walking speed — filtering
+// them out below this threshold is what stops the beam from jittering
+// around while the user is essentially stationary.
+const MIN_SPEED_FOR_HEADING = 0.5; // m/s
+
+function shortestAngleDelta(from, to) {
+    return ((to - from + 540) % 360) - 180;
+}
+
+function tickHeadingAnim() {
+    if (headingAnim.target == null) { headingAnim.rafId = null; return; }
+    if (headingAnim.current == null) headingAnim.current = headingAnim.target;
+
+    const delta = shortestAngleDelta(headingAnim.current, headingAnim.target);
+    const EASE = 0.18; // higher = snappier, lower = smoother/more damped
+
+    if (Math.abs(delta) < 0.5) {
+        headingAnim.current = headingAnim.target;
+        applyUserMarkerHeadingRaw(headingAnim.current);
+        headingAnim.rafId = null; // converged — stop animating (saves battery while idle)
+        return;
+    }
+
+    headingAnim.current = (headingAnim.current + delta * EASE + 360) % 360;
+    applyUserMarkerHeadingRaw(headingAnim.current);
+    headingAnim.rafId = requestAnimationFrame(tickHeadingAnim);
+}
+
+// Sets the CSS custom property directly, no smoothing/validation — only
+// ever called from tickHeadingAnim() above.
+function applyUserMarkerHeadingRaw(deg) {
     if (state.userMarker) {
         state.userMarker.getElement().style.setProperty('--user-heading', `${deg}deg`);
     }
     if (map3dState.userMarker) {
         map3dState.userMarker.getElement().style.setProperty('--user-heading', `${deg}deg`);
+    }
+}
+
+// ✅ Public entry point — call with the latest raw heading reading (and,
+// when available, the current speed). Validates the reading and starts/
+// continues the smoothing animation toward it. An invalid heading, or a
+// heading reported while essentially stationary, is a no-op — the beam
+// simply keeps pointing in its last reliable direction instead of
+// snapping to a default or rotating randomly.
+function applyUserMarkerHeading(headingDeg, speed) {
+    if (typeof headingDeg !== 'number' || Number.isNaN(headingDeg)) return;
+    if (typeof speed === 'number' && speed < MIN_SPEED_FOR_HEADING) return;
+
+    const deg = ((headingDeg % 360) + 360) % 360;
+    headingAnim.target = deg;
+    if (headingAnim.rafId == null) {
+        headingAnim.rafId = requestAnimationFrame(tickHeadingAnim);
     }
 }
 
@@ -5043,7 +5091,7 @@ function startNavigationLocationWatch() {
             state.deadReckoning.speed = typeof pos.coords.speed === 'number' ? pos.coords.speed : null;
             state.deadReckoning.heading = typeof pos.coords.heading === 'number' ? pos.coords.heading : null;
             state.deadReckoning.accuracy = accuracy;
-            applyUserMarkerHeading(pos.coords.heading);
+            applyUserMarkerHeading(pos.coords.heading, pos.coords.speed);
             startDeadReckoningLoop();
 
             if (state.currentRoute && state.currentRoute.coordinates && state.currentRoute.coordinates.length) {
