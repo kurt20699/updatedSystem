@@ -571,6 +571,8 @@ app.post("/api/auth/register", async (req, res) => {
 
     const user = insertResult.rows[0];
 
+    broadcastPendingUsersChanged();
+
     const appBaseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3001}`;
     const verificationLink = `${appBaseUrl}/api/auth/verify-email?token=${verificationToken}`;
 
@@ -1158,6 +1160,18 @@ function broadcastAnnouncementsChanged() {
 }
 
 // ══════════════════════════════════════════
+// 🪪 REAL-TIME PENDING ID VERIFICATION UPDATES (SSE)
+// ══════════════════════════════════════════
+const pendingUsersSseClients = new Set();
+
+function broadcastPendingUsersChanged() {
+  const payload = `data: ${JSON.stringify({ type: "usersChanged", at: Date.now() })}\n\n`;
+  for (const client of pendingUsersSseClients) {
+    client.write(payload);
+  }
+}
+
+// ══════════════════════════════════════════
 // ⏰ EXPIRATION SWEEP — server-authoritative real-time expiry
 // ══════════════════════════════════════════
 // Runs on a short interval and actively flips any approved/active
@@ -1442,6 +1456,7 @@ app.get("/api/realtime/stream", (req, res) => {
 
   announcementSseClients.add(res);
   mapDataSseClients.add(res);
+  pendingUsersSseClients.add(res);
 
   if (!activeUserConnections.has(userId)) {
     activeUserConnections.set(userId, { role, conns: new Set() });
@@ -1457,6 +1472,7 @@ app.get("/api/realtime/stream", (req, res) => {
     clearInterval(heartbeat);
     announcementSseClients.delete(res);
     mapDataSseClients.delete(res);
+    pendingUsersSseClients.delete(res);
     const entry = activeUserConnections.get(userId);
     if (entry) {
       entry.conns.delete(res);
@@ -1650,6 +1666,8 @@ app.put("/api/admin/users/:userId/approve", requireAdmin, async (req, res) => {
 
     const approvedUser = result.rows[0];
 
+    broadcastPendingUsersChanged();
+
     await logAudit({
       adminUserId: req.body?.adminUserId || req.query?.adminUserId,
       action: "user_verification_approve",
@@ -1702,6 +1720,9 @@ app.put("/api/admin/users/:userId/reject", requireAdmin, async (req, res) => {
       [req.params.userId]
     );
     if (!result.rows.length) return res.status(404).json({ ok: false, error: "User not found." });
+
+    broadcastPendingUsersChanged();
+
     await logAudit({
       adminUserId: req.body?.adminUserId || req.query?.adminUserId,
       action: "user_verification_reject",
