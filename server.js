@@ -68,6 +68,20 @@ function formatRegistrationMessage({ name, userId, role, verificationLink }) {
   ].join("\n");
 }
 
+function formatApprovalMessage({ name, role }) {
+  return [
+    `Hello ${name},`,
+    "",
+    `Your ${role} account has been reviewed and approved by the administrator.`,
+    "You can now log in to the PRMSU Smart Campus Navigator using your registered email and password.",
+    "",
+    "Account Status: Approved ✅",
+    "",
+    "Thank you for registering with PRMSU Smart Campus Navigator.",
+    "PRMSU Smart Campus Navigator Team"
+  ].join("\n");
+}
+
 const bcrypt = require("bcryptjs");
 const BCRYPT_ROUNDS = 12;
 
@@ -1633,6 +1647,9 @@ app.put("/api/admin/users/:userId/approve", requireAdmin, async (req, res) => {
       [req.params.userId]
     );
     if (!result.rows.length) return res.status(404).json({ ok: false, error: "User not found." });
+
+    const approvedUser = result.rows[0];
+
     await logAudit({
       adminUserId: req.body?.adminUserId || req.query?.adminUserId,
       action: "user_verification_approve",
@@ -1640,7 +1657,38 @@ app.put("/api/admin/users/:userId/approve", requireAdmin, async (req, res) => {
       entityId: req.params.userId,
       details: {}
     });
-    return res.json({ ok: true, user: result.rows[0] });
+
+    // ✅ Send approval notification email — only reachable after the
+    // verification_status update above has already succeeded.
+    const approvalSubject = "Your Account Has Been Approved";
+    const approvalMessage = formatApprovalMessage({
+      name: approvedUser.full_name,
+      role: approvedUser.role
+    });
+
+    try {
+      const emailResult = await sendBrevoEmail({
+        toEmail: approvedUser.email,
+        toName: approvedUser.full_name,
+        subject: approvalSubject,
+        textBody: approvalMessage
+      });
+      await logNotification({
+        userId: approvedUser.user_id, channel: "email", recipient: approvedUser.email,
+        subject: approvalSubject, message: approvalMessage,
+        status: emailResult.sent ? "sent" : "skipped",
+        context: "account_approval"
+      });
+    } catch (error) {
+      await logNotification({
+        userId: approvedUser.user_id, channel: "email", recipient: approvedUser.email,
+        subject: approvalSubject, message: approvalMessage,
+        status: "failed", errorDetail: error.message,
+        context: "account_approval"
+      });
+    }
+
+    return res.json({ ok: true, user: approvedUser });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
