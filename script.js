@@ -4888,7 +4888,11 @@ async function recordRoute({ route, destination, startCoords, source }) {
 
 // Updated clearRoute function
 function clearRoute() {
-    stopNavigationLocationWatch(); // ✅ ADD THIS
+    // ❌ REMOVED stopNavigationLocationWatch() — clearing a route must only
+    // remove the route/UI, never the GPS watcher, dead-reckoning loop, or
+    // compass listener. Location tracking is independent of navigation and
+    // should keep running whether the user is navigating or just viewing
+    // the map, exactly like Google Maps' blue dot.
     // Routing is now plain MapLibre layers/sources — one function cleans it all up.
     removeRouteLine();
     
@@ -4924,7 +4928,11 @@ function minimizeRoutePanel() {
 
 // Complete route removal
 function clearRouteCompletely() {
-    stopNavigationLocationWatch(); // ✅ ADD THIS
+    // ❌ REMOVED stopNavigationLocationWatch() — same reasoning as clearRoute()
+    // above: fully clearing a route (e.g. leaving navigation mode entirely)
+    // still must not stop location tracking. The GPS watcher, dead-reckoning
+    // loop, and compass listener all keep running so the blue dot and its
+    // beam continue updating in the background regardless of route state.
     state._routeRecordedThisNav = false;
 
 
