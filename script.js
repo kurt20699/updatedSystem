@@ -177,14 +177,43 @@ function tickHeadingAnim() {
 }
 
 // Sets the CSS custom property directly, no smoothing/validation — only
-// ever called from tickHeadingAnim() above.
+// ever called from tickHeadingAnim() above (or from a map 'rotate' handler
+// re-applying the last known true heading, see wireHeadingToMapBearing()).
+//
+// `deg` is the TRUE real-world heading (0 = north, clockwise) — the same
+// value regardless of how either map is currently rotated. Each map draws
+// its marker in its own rotated screen space though, so the CSS var actually
+// written for a given map is the true heading minus THAT map's own bearing,
+// normalized back into 0–360. This is exactly what keeps the cone pointing
+// at the correct real-world direction on screen even as the map spins under
+// it — the same trick Google Maps uses for its blue dot.
+function normalizeDeg(deg) {
+    return ((deg % 360) + 360) % 360;
+}
+
 function applyUserMarkerHeadingRaw(deg) {
-    if (state.userMarker) {
-        state.userMarker.getElement().style.setProperty('--user-heading', `${deg}deg`);
+    if (state.userMarker && state.map) {
+        const bearing = typeof state.map.getBearing === 'function' ? state.map.getBearing() : 0;
+        state.userMarker.getElement().style.setProperty('--user-heading', `${normalizeDeg(deg - bearing)}deg`);
     }
-    if (map3dState.userMarker) {
-        map3dState.userMarker.getElement().style.setProperty('--user-heading', `${deg}deg`);
+    if (map3dState.userMarker && map3dState.map) {
+        const bearing3d = typeof map3dState.map.getBearing === 'function' ? map3dState.map.getBearing() : 0;
+        map3dState.userMarker.getElement().style.setProperty('--user-heading', `${normalizeDeg(deg - bearing3d)}deg`);
     }
+}
+
+// Re-applies the last known TRUE heading (headingAnim.current) whenever a
+// map's bearing changes — e.g. the user drags the compass control or does
+// a two-finger rotate — so the beam stays correctly aligned to real-world
+// direction even when the compass/GPS heading itself hasn't changed at all.
+// Kept as a single shared listener factory since 2D and 3D maps both need
+// the identical behavior wired to their own 'rotate' event.
+function wireHeadingToMapBearing(map) {
+    if (!map || map._headingBearingWired) return;
+    map.on('rotate', () => {
+        if (headingAnim.current != null) applyUserMarkerHeadingRaw(headingAnim.current);
+    });
+    map._headingBearingWired = true;
 }
 
 // ✅ Public entry point — call with the latest raw heading reading (and,
@@ -2638,6 +2667,7 @@ function initializeMap() {
     state.map.keyboard.disableRotation();
 
     state.map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
+    wireHeadingToMapBearing(state.map); // keep the beam locked to true north as the map rotates
 
     // MapLibre doesn't auto-detect container size changes like Leaflet did —
     // without this, markers/tiles get left behind at old screen positions
@@ -6502,6 +6532,7 @@ function enter3DMap() {
             showZoom: true,
             visualizePitch: true
         }), 'top-right');
+        wireHeadingToMapBearing(map3dState.map); // keep the beam locked to true north as the map rotates
 
         map3dState.map.on('load', () => {
             map3dState.baseStyleLayerIds = map3dState.map.getStyle().layers.map(l => l.id);
