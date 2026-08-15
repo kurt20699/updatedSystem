@@ -1600,13 +1600,13 @@ body.sidebar-open {
     background: conic-gradient(
         from calc(var(--user-heading, 0deg) - 32deg),
         rgba(66, 133, 244, 0) 0deg,
-        rgba(66, 133, 244, 0.32) 32deg,
-        rgba(66, 133, 244, 0.12) 50deg,
+        rgba(66, 133, 244, 0.5) 32deg,
+        rgba(66, 133, 244, 0.22) 50deg,
         rgba(66, 133, 244, 0) 64deg,
         rgba(66, 133, 244, 0) 360deg
     );
-    -webkit-mask-image: radial-gradient(circle at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0.9) 35%, rgba(0,0,0,0) 100%);
-    mask-image: radial-gradient(circle at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0.9) 35%, rgba(0,0,0,0) 100%);
+    -webkit-mask-image: radial-gradient(circle at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0.95) 40%, rgba(0,0,0,0) 100%);
+    mask-image: radial-gradient(circle at center, rgba(0,0,0,1) 0%, rgba(0,0,0,0.95) 40%, rgba(0,0,0,0) 100%);
     pointer-events: none;
     z-index: 0;
     /* No CSS transition here — the beam's direction is now smoothed frame-
