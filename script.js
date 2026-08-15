@@ -3301,6 +3301,18 @@ function calculateDistance(coord1, coord2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
+// ✅ Bearing (0–360, clockwise from north) from coord1 to coord2 — used as a
+// derived-heading fallback for dead reckoning when pos.coords.heading is
+// null (common on many Android devices even while actively walking).
+function calculateBearing(coord1, coord2) {
+    const lat1 = coord1[0] * Math.PI / 180;
+    const lat2 = coord2[0] * Math.PI / 180;
+    const dLng = (coord2[1] - coord1[1]) * Math.PI / 180;
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
 // ✅ Finds the closest point on the ENTIRE route polyline (not just its
 // first coordinate) to a given lat/lng — used both to snap the dot onto
 // the path and to measure a short, stable "off-path" gap instead of a
@@ -5195,22 +5207,54 @@ function startNavigationLocationWatch() {
             state.userLocation = { lat: smoothedLat, lng: smoothedLng, accuracy };
             updateUserLocationMarker(smoothedLat, smoothedLng, accuracy);
 
-            // ✅ Re-anchor dead reckoning to this real fix. pos.coords.speed
-            // and pos.coords.heading are the OS's own fused output (GPS +
-            // compass + accelerometer), not something we compute ourselves —
-            // we just use them to keep gliding the dot forward until the
-            // next real fix corrects it.
+            // ✅ Derive speed/heading from the gap between this fix and the
+            // previous dead-reckoning anchor as a fallback. Many devices
+            // (Android especially) frequently report pos.coords.speed and
+            // pos.coords.heading as null even while the user is actively
+            // walking — previously that silently disabled dead reckoning
+            // entirely (its MIN_SPEED/heading checks require real numbers),
+            // which is exactly what made the dot visibly lag/stall between
+            // GPS fixes instead of gliding smoothly like Google Maps.
+            const now = Date.now();
+            let derivedSpeed = null;
+            let derivedHeading = null;
+            if (state.deadReckoning.baseLat != null && state.deadReckoning.baseTime) {
+                const dt = (now - state.deadReckoning.baseTime) / 1000;
+                if (dt > 0.1) { // avoid noisy divide on back-to-back fixes
+                    const distM = calculateDistance(
+                        [state.deadReckoning.baseLat, state.deadReckoning.baseLng],
+                        [smoothedLat, smoothedLng]
+                    );
+                    derivedSpeed = distM / dt;
+                    derivedHeading = calculateBearing(
+                        [state.deadReckoning.baseLat, state.deadReckoning.baseLng],
+                        [smoothedLat, smoothedLng]
+                    );
+                }
+            }
+
+            // Re-anchor dead reckoning to this real fix. Prefer the OS's own
+            // fused speed/heading (GPS + compass + accelerometer) when it
+            // actually reports one; otherwise fall back to the derived
+            // values above so the glide never silently stops.
             state.deadReckoning.baseLat = smoothedLat;
             state.deadReckoning.baseLng = smoothedLng;
-            state.deadReckoning.baseTime = Date.now();
-            state.deadReckoning.speed = typeof pos.coords.speed === 'number' ? pos.coords.speed : null;
-            state.deadReckoning.heading = typeof pos.coords.heading === 'number' ? pos.coords.heading : null;
+            state.deadReckoning.baseTime = now;
+            state.deadReckoning.speed = (typeof pos.coords.speed === 'number' && pos.coords.speed > 0)
+                ? pos.coords.speed
+                : derivedSpeed;
+            state.deadReckoning.heading = (typeof pos.coords.heading === 'number' && !Number.isNaN(pos.coords.heading))
+                ? pos.coords.heading
+                : derivedHeading;
             state.deadReckoning.accuracy = accuracy;
             // Only let GPS heading drive the beam when the compass isn't
             // actively supplying fresher readings — prevents the two from
             // fighting over the beam's rotation.
             if (!compassState.supported || Date.now() - compassState.lastUpdate > COMPASS_STALE_MS) {
-                applyUserMarkerHeading(pos.coords.heading, pos.coords.speed);
+                applyUserMarkerHeading(
+                    typeof pos.coords.heading === 'number' ? pos.coords.heading : derivedHeading,
+                    typeof pos.coords.speed === 'number' ? pos.coords.speed : derivedSpeed
+                );
             }
             startDeadReckoningLoop();
 
