@@ -2090,6 +2090,32 @@ path.dotted-end-line {
     }
 }
 
+@media (max-width: 359px) {
+    .main-header {
+        padding: 14px 10px;
+    }
+    .header-title {
+        font-size: 17px;
+    }
+    .header-subtitle {
+        font-size: 11px;
+    }
+    .sidebar > div {
+        padding: 10px;
+    }
+    .category-btn {
+        padding: 7px 8px;
+        font-size: 12px;
+    }
+    .quick-access-btn {
+        padding: 11px 12px;
+        font-size: 13px;
+    }
+    .search-box {
+        min-height: 44px;
+    }
+}
+
 @media (max-width: 400px) {
     .building-popup-with-image.maplibregl-popup {
         width: calc(100vw - 24px);
@@ -2527,6 +2553,29 @@ path.dotted-end-line {
         grid-template-columns: 1fr;
         height: calc(var(--app-vh) * 100 - 150px);
         min-height: 440px;
+    }
+
+    /* Short-height / landscape phones — the 440px floor above can exceed
+        the actual viewport height when rotated (e.g. ~375px tall), forcing
+       needless scrolling. Let the container shrink to fit instead. */
+    @media (max-height: 480px) and (orientation: landscape) {
+        .main-header {
+            padding: 8px 14px;
+        }
+        .header-content {
+            flex-direction: row;
+            gap: 10px;
+        }
+        .header-subtitle {
+            display: none;
+        }
+        .main-container {
+            height: calc(var(--app-vh) * 100 - 60px);
+            min-height: 0;
+        }
+        .sidebar {
+            padding: 12px 14px 16px;
+        }
     }
 
     .sidebar {
