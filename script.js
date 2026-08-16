@@ -4243,7 +4243,7 @@ async function refreshActiveRouteForModeChange() {
         if (myRequestId !== routeRequestSeq) return;
 
         showNotification('Could not recalculate route for this travel mode. Try a different mode.', 'error');
-        drawFallbackRoute(startCoords, destination);
+        drawFallbackRoute(startCoords, destination, routingProfile);
     }
 }
 
@@ -4456,7 +4456,7 @@ async function navigateToSelected() {
     } catch (err) {
         console.error('Routing error:', err);
         showNotification('Could not calculate route. Using direct path.', 'error');
-        drawFallbackRoute(startCoords, destination);
+        drawFallbackRoute(startCoords, destination, routingProfile);
     }
 
     // Close location modal
@@ -4850,7 +4850,7 @@ function getDirectionIcon(type) {
 }
 
 // Fallback route if routing fails
-function drawFallbackRoute(start, destination) {
+function drawFallbackRoute(start, destination, profile = 'foot') {
     const geojson = {
         type: 'Feature',
         geometry: {
@@ -4888,10 +4888,28 @@ function drawFallbackRoute(start, destination) {
     );
 
     const distance = calculateDistance(start, destination.coords);
-    const estimatedTime = Math.ceil(distance / 80);
+
+    // ✅ The direct-line ETA now scales with the selected travel mode
+    // instead of always assuming walking pace — a Car/Bike fallback that
+    // still reported a walking-speed estimate was misleading.
+    const FALLBACK_SPEED_M_PER_MIN = { foot: 80, 'cycling-regular': 250, 'driving-car': 500 };
+    const estimatedTime = Math.ceil(distance / (FALLBACK_SPEED_M_PER_MIN[profile] || FALLBACK_SPEED_M_PER_MIN.foot));
+
+    const { label: timeLabel, icon: timeIcon } = getTravelModeLabel(profile);
 
     const routeInfo = document.getElementById('routeInfo');
     const details = document.getElementById('routeDetails');
+
+    // ✅ Root cause of "Could not find walking route" appearing for Car/Bike:
+    // this message was hardcoded to always say "walking route" regardless
+    // of which profile actually failed. The failure itself is usually
+    // legitimate — Car/Bike routing runs against the real public road
+    // network, and most intra-campus distances are only connected by
+    // pedestrian footpaths with no drivable road between them, so
+    // GraphHopper correctly reports no route for those modes. The fix is
+    // accurate messaging (name the mode that failed) plus a mode-correct
+    // ETA, not silently forcing a fake route.
+    const modeNoun = { foot: 'walking', 'cycling-regular': 'cycling', 'driving-car': 'driving' }[profile] || 'walking';
 
     details.innerHTML = `
         <div class="route-summary">
@@ -4899,7 +4917,7 @@ function drawFallbackRoute(start, destination) {
                 <strong>📏 Distance:</strong> ${Math.round(distance)} m (direct)
             </div>
             <div class="route-stat">
-                <strong>⏱️ Est. Time:</strong> ${estimatedTime} min
+                <strong>${timeIcon} ${timeLabel}:</strong> ${estimatedTime} min
             </div>
             <div class="route-stat">
                 <strong>📍 Destination:</strong> ${destination.name}
@@ -4907,7 +4925,7 @@ function drawFallbackRoute(start, destination) {
         </div>
         <div class="route-divider"></div>
         <p style="color: #ea4335; font-size: 13px; padding: 10px; background: #fee; border-radius: 6px;">
-            ⚠️ Could not find walking route. Showing direct path. Actual route may differ.
+            ⚠️ Could not find a ${modeNoun} route to this destination. Showing a direct path — actual distance/time may differ. Try a different travel mode if one is available.
         </p>
     `;
 
