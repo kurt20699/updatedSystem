@@ -20,6 +20,30 @@
 
     const els = {};
 
+    // ── Role gate — Campus Tips is hidden from Visitors ─────────
+    function canAccessCampusTips() {
+        const session = (typeof getAuthSession === 'function') ? getAuthSession() : null;
+        const role = session?.role || 'VISITOR';
+        if (typeof window.Permissions?.canUseFeature === 'function') {
+            return window.Permissions.canUseFeature(role, 'campusTips');
+        }
+        // Fallback if permissions.js hasn't loaded for some reason
+        return String(role).toUpperCase() !== 'VISITOR';
+    }
+
+    // Hides the Tips card for Visitors, and forces back to the Alerts tab
+    // if a role change (e.g. logout without a full page reload) leaves a
+    // Visitor sitting on Tips. The tab BUTTON itself is hidden by
+    // script.js's applyAlertsTipsTabVisibility() (single source of truth
+    // for the shared #alertsTipsTabs container) — this only needs to own
+    // the card content and the active-tab state.
+    function applyCampusTipsVisibility() {
+        if (!canAccessCampusTips()) {
+            if (activeTab === 'tips') setActiveTab('alerts');
+            els.tipsCard?.classList.add('hidden');
+        }
+    }
+
     function cacheEls() {
         els.tabsWrap = document.getElementById('alertsTipsTabs');
         els.alertBanner = document.getElementById('alertBanner');
@@ -32,6 +56,9 @@
 
     // ── Tab switching ──────────────────────────────────────────
     function setActiveTab(tab) {
+        // ✅ Hard block regardless of DOM state — refuses even if the tab
+        // button were forced clickable some other way.
+        if (tab === 'tips' && !canAccessCampusTips()) return;
         activeTab = tab;
 
         els.tabsWrap?.querySelectorAll('.alerts-tips-tab').forEach(btn => {
@@ -117,8 +144,25 @@
 
     // ── Data ───────────────────────────────────────────────────
     async function loadCampusTips() {
+        applyCampusTipsVisibility();
+
+        // ✅ Visitors never hit the network for this at all — not on init,
+        // not on the SSE 'campusTipsChanged' ping, not from a console call
+        // to window.refreshCampusTips(). The server enforces this too (see
+        // /api/campus-tips in server.js), so this is belt-and-suspenders,
+        // not the actual security boundary.
+        if (!canAccessCampusTips()) {
+            tips = [];
+            renderCurrentTip();
+            return;
+        }
+
         try {
-            const res = await fetch('/api/campus-tips');
+            const session = (typeof getAuthSession === 'function') ? getAuthSession() : null;
+            const url = session?.userId
+                ? `/api/campus-tips?userId=${encodeURIComponent(session.userId)}`
+                : '/api/campus-tips';
+            const res = await fetch(url);
             const data = await res.json();
             tips = (data.ok && Array.isArray(data.tips)) ? data.tips : [];
         } catch (e) {
@@ -134,6 +178,13 @@
     // ✅ Public hook — script.js's realtime SSE listener calls this on a
     // 'campusTipsChanged' event, same pattern as window.refreshCampusAlerts.
     window.refreshCampusTips = loadCampusTips;
+
+    // ✅ Public hook — script.js calls this right after login and on logout
+    // (see startAppAfterAuth()/logoutUser()), so the tab/card appears or
+    // disappears immediately instead of only updating on next page refresh.
+    window.CampusTipsWidget = {
+        refresh: () => { applyCampusTipsVisibility(); loadCampusTips(); }
+    };
 
     // ── Swipe support (mobile) ───────────────────────────────────
     function wireSwipe() {
@@ -164,6 +215,7 @@
         els.prevBtn?.addEventListener('click', showPrevTip);
         els.nextBtn?.addEventListener('click', showNextTip);
         wireSwipe();
+        applyCampusTipsVisibility();
 
         // script.js and this file both load with `defer`, in <script> order,
         // so showAlert should already exist — but retry briefly instead of

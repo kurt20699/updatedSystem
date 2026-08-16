@@ -1501,6 +1501,17 @@ app.get("/api/realtime/stream", (req, res) => {
 
 app.get("/api/announcements", async (req, res) => {
   const activeOnly = req.query.active === "true";
+
+  // Visitor-only restriction — only the Main App's Campus Alerts widget
+  // ever calls this with ?active=true; the Admin Dashboard's stats/list
+  // views call this same route unfiltered and must stay unaffected.
+  if (activeOnly) {
+    const role = await getCallerRole(req);
+    if (Permissions.normalizeRole(role) === Permissions.ROLES.VISITOR) {
+      return res.status(403).json({ ok: false, error: "Campus Alerts is not available for your account type." });
+    }
+  }
+
   try {
     const result = await pool.query(
       activeOnly
@@ -1576,8 +1587,17 @@ app.delete("/api/announcements/:id", requireAdmin, async (req, res) => {
 // 💡 CAMPUS TIPS
 // ══════════════════════════════════════════
 
-// Public — Main App only ever needs active tips.
-app.get("/api/campus-tips", async (_req, res) => {
+// Visitor-only restriction — role resolved server-side via getCallerRole(),
+// same helper /api/chat and the announcements route above use. This is the
+// actual enforcement boundary: hiding the tab client-side is a UX nicety,
+// but a direct GET to this URL (or a console fetch()) is blocked here
+// regardless of what the client UI shows.
+app.get("/api/campus-tips", async (req, res) => {
+  const role = await getCallerRole(req);
+  if (Permissions.normalizeRole(role) === Permissions.ROLES.VISITOR) {
+    return res.status(403).json({ ok: false, error: "Campus Tips is not available for your account type." });
+  }
+
   try {
     const result = await pool.query(
       `SELECT * FROM campus_tips WHERE is_active = true ORDER BY created_at DESC`

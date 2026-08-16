@@ -63,7 +63,9 @@
                 multiStop: true,
                 roomInstructor: false,
                 searchRooms: true,
-                submitAnnouncements: false   // ← add this line
+                submitAnnouncements: false,
+                campusTips: false,           // ✅ Campus Alerts/Tips hidden from Visitors
+                campusAlerts: false          // ✅ Campus Alerts/Tips hidden from Visitors
             }
         },
         [ROLES.STUDENT]: {
@@ -74,7 +76,9 @@
                 multiStop: true,
                 roomInstructor: true,
                 searchRooms: true,
-                submitAnnouncements: false   // ← add this line
+                submitAnnouncements: false,
+                campusTips: true,
+                campusAlerts: true
             }
         },
         [ROLES.EMPLOYEE]: {
@@ -85,7 +89,9 @@
                 multiStop: true,
                 roomInstructor: true,
                 searchRooms: true,
-                submitAnnouncements: true    // ← add this line (Employees get the new privilege)
+                submitAnnouncements: true,   // Employees get the new privilege
+                campusTips: true,
+                campusAlerts: true
             }
         },
         [ROLES.ADMIN]: {
@@ -96,7 +102,9 @@
                 multiStop: true,
                 roomInstructor: true,
                 searchRooms: true,
-                submitAnnouncements: false   // ← add this line
+                submitAnnouncements: false,
+                campusTips: true,
+                campusAlerts: true
             },
             isAdmin: true
         }

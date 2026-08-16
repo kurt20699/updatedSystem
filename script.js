@@ -31,6 +31,21 @@ function showAlert(message, type = 'info') {
     console.log('Alert shown:', type, message, banner.className);
 }
 
+// ✅ Shared visibility gate for the Campus Alerts / Campus Tips tab strip.
+// Visitors get neither feature — this hides the tab container (buttons +
+// the "|" separator) entirely rather than leaving an empty/dead UI element
+// pointing at features a Visitor account can't use.
+function applyAlertsTipsTabVisibility() {
+    const tabsWrap = document.getElementById('alertsTipsTabs');
+    if (!tabsWrap) return;
+    const session = getAuthSession();
+    const role = session?.role || 'VISITOR';
+    const allowed = window.Permissions?.canUseFeature(role, 'campusAlerts')
+        || window.Permissions?.canUseFeature(role, 'campusTips');
+    tabsWrap.classList.toggle('hidden', !allowed);
+}
+window.applyAlertsTipsTabVisibility = applyAlertsTipsTabVisibility;
+
 // Helper function to normalize coordinates to array format
 function normalizeCoords(coords) {
     if (Array.isArray(coords)) {
@@ -1103,6 +1118,16 @@ function logoutUser() {
     localStorage.removeItem(AUTH_SESSION_KEY);
     window.EmployeeAnnouncementWidget?.refresh();
 
+    // ✅ Logging out drops back to Visitor rules — re-hide Campus Alerts/Tips
+    // immediately instead of leaving them visible until a page refresh.
+    if (window._alertCycleInterval) {
+        clearInterval(window._alertCycleInterval);
+        window._alertCycleInterval = null;
+    }
+    document.getElementById('alertBanner')?.classList.add('hidden');
+    applyAlertsTipsTabVisibility();
+    window.CampusTipsWidget?.refresh();
+
     const profilePanel = document.getElementById('profilePanel');
     const profilePanelOverlay = document.getElementById('profilePanelOverlay');
     if (profilePanel) {
@@ -1740,6 +1765,14 @@ function startAppAfterAuth() {
             // run and so always saw a logged-out state. Without this call the
             // Submit button/badge only appeared after a manual page refresh.
             window.EmployeeAnnouncementWidget?.refresh();
+
+            // ✅ Same reasoning as above, for Campus Tips: campus-tips.js's
+            // own init() only evaluates the role once on DOMContentLoaded —
+            // before setAuthSession() has run on a fresh login — so without
+            // this call a just-unlocked Student/Employee tab would only
+            // appear after a manual page refresh. loadCampus('iba') above
+            // already re-evaluated the Alerts tab via applyAlertsTipsTabVisibility().
+            window.CampusTipsWidget?.refresh();
 
             console.log('Initialization complete!');
 
@@ -2726,11 +2759,35 @@ function loadCampus(campusKey) {
 
     // Show alerts — merge hardcoded + live DB announcements
     async function loadAndShowAlerts() {
+        // ✅ Visitor-only restriction — Campus Alerts is hidden entirely from
+        // Visitors: no tab, no banner, no fetch to /api/announcements at all.
+        // This also covers the hardcoded campus.alerts entries, not just
+        // live DB announcements, since we bail out before touching either.
+        applyAlertsTipsTabVisibility();
+        const gateSession = getAuthSession();
+        const gateRole = gateSession?.role || 'VISITOR';
+        if (!window.Permissions?.canUseFeature(gateRole, 'campusAlerts')) {
+            if (window._alertCycleInterval) {
+                clearInterval(window._alertCycleInterval);
+                window._alertCycleInterval = null;
+            }
+            document.getElementById('alertBanner')?.classList.add('hidden');
+            const hiddenCounter = document.getElementById('alertCounter');
+            if (hiddenCounter) hiddenCounter.textContent = '';
+            return;
+        }
+
         let alerts = [...(campus.alerts || [])]; // start with hardcoded
         let liveAnnouncements = [];
 
         try {
-            const res = await fetch('/api/announcements?active=true');
+            // ✅ Pass userId so the server can resolve the real role via
+            // getCallerRole() — without this the endpoint always saw an
+            // anonymous/Visitor caller regardless of who was logged in.
+            const url = gateSession?.userId
+                ? `/api/announcements?active=true&userId=${encodeURIComponent(gateSession.userId)}`
+                : '/api/announcements?active=true';
+            const res = await fetch(url);
             const data = await res.json();
             if (data.ok && data.announcements.length) {
                 liveAnnouncements = data.announcements;
