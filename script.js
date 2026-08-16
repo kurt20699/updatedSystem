@@ -431,6 +431,136 @@ function describeGeoError(error) {
     }
 }
 
+// ── Location-blocked instructions panel ─────────────────────────────
+// A hard PERMISSION_DENIED (error.code === 1) can never be fixed by
+// retrying — the browser/OS has the origin blocked and only the user
+// can change that in their settings. A 3-second toast isn't enough
+// room to explain how, so this shows a dismissible panel with
+// device-specific steps instead. Self-contained (injects its own
+// style once), same pattern as ai-chat-widget.js / employee-
+// announcement-widget.js.
+let _geoBlockedPanelStyleInjected = false;
+function ensureGeoBlockedPanelStyle() {
+    if (_geoBlockedPanelStyleInjected) return;
+    _geoBlockedPanelStyleInjected = true;
+    const style = document.createElement('style');
+    style.id = 'geo-blocked-panel-styles';
+    style.textContent = `
+        #geoBlockedPanel {
+            position: fixed;
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%);
+            width: min(360px, calc(100vw - 32px));
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+            padding: 16px 18px;
+            z-index: 4000;
+            font-family: system-ui, sans-serif;
+        }
+        #geoBlockedPanel h4 {
+            margin: 0 0 6px;
+            font-size: 14px;
+            color: #0f3a52;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        #geoBlockedPanel p {
+            margin: 0 0 8px;
+            font-size: 12.5px;
+            color: #374151;
+            line-height: 1.45;
+        }
+        #geoBlockedPanel ol {
+            margin: 0 0 10px;
+            padding-left: 18px;
+            font-size: 12.5px;
+            color: #374151;
+            line-height: 1.5;
+        }
+        #geoBlockedPanel button {
+            background: #1e3a8a;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-size: 12.5px;
+            cursor: pointer;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+function getGeoBlockedSteps() {
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPhone|iPad|iPod/.test(ua);
+    const isAndroid = /Android/.test(ua);
+
+    if (isIOS) {
+        return [
+            'Open the Settings app on your device.',
+            'Scroll down and tap Safari (or your browser).',
+            'Tap Location, then choose "Allow" or "Ask Next Time".',
+            'Reload this page and try again.'
+        ];
+    }
+    if (isAndroid) {
+        return [
+            'Tap the 🔒 lock icon next to the address bar.',
+            'Tap Permissions, then Location.',
+            'Choose "Allow" and reload this page.',
+            'If it\'s still blocked, check Settings > Apps > (your browser) > Permissions > Location.'
+        ];
+    }
+    return [
+        'Click the 🔒 lock icon in the address bar.',
+        'Find Location in the site permissions list.',
+        'Change it to "Allow" and reload this page.'
+    ];
+}
+
+function showLocationBlockedInstructions() {
+    ensureGeoBlockedPanelStyle();
+    document.getElementById('geoBlockedPanel')?.remove();
+
+    const steps = getGeoBlockedSteps();
+    const panel = document.createElement('div');
+    panel.id = 'geoBlockedPanel';
+    panel.innerHTML = `
+        <h4>📍 Location is blocked for this site</h4>
+        <p>Your browser has location access turned off for this site. This can only be fixed in your settings — reloading or retrying won't help.</p>
+        <ol>${steps.map(s => `<li>${s}</li>`).join('')}</ol>
+        <button type="button" id="geoBlockedDismiss">Got it</button>
+    `;
+    document.body.appendChild(panel);
+    document.getElementById('geoBlockedDismiss').addEventListener('click', () => panel.remove());
+}
+
+// One-time check on load so the app knows ahead of time whether
+// location is already blocked, before the user even taps "Find My
+// Location". Not all browsers support the Permissions API (notably
+// older iOS Safari) — silently no-ops there, falling back to the
+// existing per-request error handling.
+function checkGeoPermissionOnLoad() {
+    if (!navigator.permissions || !navigator.permissions.query) return;
+    navigator.permissions.query({ name: 'geolocation' }).then((status) => {
+        if (status.state === 'denied') {
+            showLocationBlockedInstructions();
+        }
+        status.onchange = () => {
+            if (status.state === 'denied') {
+                showLocationBlockedInstructions();
+            } else {
+                document.getElementById('geoBlockedPanel')?.remove();
+            }
+        };
+    }).catch(() => {});
+}
+
+document.addEventListener('DOMContentLoaded', checkGeoPermissionOnLoad);
+
 // Runs a single watchPosition attempt for up to `waitMs`, resolving with the
 // most accurate reading seen ({ position, error }). `highAccuracy` controls
 // whether we ask for GPS (slower, precise) or network/WiFi-based positioning
@@ -601,7 +731,14 @@ function getCampusUserLocation(campus) {
 
     return acquireAccurateLocation().then(({ position, error }) => {
         if (!position) {
-            showNotification(error?.message || 'Unable to get your location', 'error');
+            // A hard denial can't be fixed by retrying, and a 3s toast isn't
+            // enough room to explain how to fix it — show the persistent,
+            // device-specific instructions panel instead.
+            if (error && error.code === 1) {
+                showLocationBlockedInstructions();
+            } else {
+                showNotification(error?.message || 'Unable to get your location', 'error');
+            }
             return null;
         }
         const lat = position.coords.latitude;
