@@ -238,6 +238,7 @@
                             <!-- Campus Alerts / Campus Tips tabs -->
                             <div id="alertsTipsTabs" class="alerts-tips-tabs">
                                 <button type="button" class="alerts-tips-tab active" data-tab="alerts">Campus Alerts</button>
+                                <span class="alerts-tips-separator" aria-hidden="true">|</span>
                                 <button type="button" class="alerts-tips-tab" data-tab="tips">Campus Tips</button>
                             </div>
 
@@ -282,14 +283,14 @@
                             <!-- Filter by Category -->
                             <div class="filter-section">
                                 <h3 class="section-title">Filter by Category</h3>
-                             <div class="category-filters">
-    <button class="category-btn active" data-filter="all">All</button>
-    <button class="category-btn" data-filter="administration">Administration</button>
-    <button class="category-btn" data-filter="department">Department</button>
-    <button class="category-btn" data-filter="facilities">Facilities</button>
-    <button class="category-btn" data-filter="office">Office</button>
-    <button class="category-btn" data-filter="landmark">Landmark</button>
-</div>
+                            <div class="category-filters">
+                                <button class="category-btn active" data-filter="all">All</button>
+                                <button class="category-btn" data-filter="administration">Administration</button>
+                                <button class="category-btn" data-filter="department">Department</button>
+                                <button class="category-btn" data-filter="facilities">Facilities</button>
+                                <button class="category-btn" data-filter="office">Office</button>
+                                <button class="category-btn" data-filter="landmark">Landmark</button>
+                            </div>
                             </div>
     
                             <!-- Quick Access -->
@@ -303,13 +304,13 @@
                             </div>
                             
                             <!-- Map Style -->
-    <div class="map-style-section">
-    <h3 class="section-title">Map Style</h3>
-    <div class="map-style-toggle">
-    <button id="mapStyleDefault" class="map-style-btn is-active" data-style="default" onclick="switchMapStyle('default')">Default (OpenStreetMap)</button>
-    <button id="mapStyleSatellite" class="map-style-btn" data-style="satellite" onclick="switchMapStyle('satellite')">Satellite</button>
-</div>
-</div>
+                                <div class="map-style-section">
+                                <h3 class="section-title">Map Style</h3>
+                                <div class="map-style-toggle">
+                                <button id="mapStyleDefault" class="map-style-btn is-active" data-style="default" onclick="switchMapStyle('default')">Default (OpenStreetMap)</button>
+                                <button id="mapStyleSatellite" class="map-style-btn" data-style="satellite" onclick="switchMapStyle('satellite')">Satellite</button>
+                            </div>
+                            </div>
     
                             <!-- Map Legend -->
                             <div class="map-legend-section">
@@ -348,16 +349,16 @@
                                 <button id="buildingPanelToggle" class="map-control-btn building-toggle" onclick="toggleBuildingPanel()">
                                 Buildings
                                 </button>
-                              <button id="centerMapBtn" class="map-control-btn center-map-btn" title="Center Map">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="12" cy="12" r="3.2" fill="currentColor"/>
-        <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2"/>
-        <line x1="12" y1="1" x2="12" y2="4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <line x1="12" y1="20" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <line x1="1" y1="12" x2="4" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <line x1="20" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>
-</button>
+                            <button id="centerMapBtn" class="map-control-btn center-map-btn" title="Center Map">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="12" cy="12" r="3.2" fill="currentColor"/>
+                                    <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2"/>
+                                    <line x1="12" y1="1" x2="12" y2="4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    <line x1="12" y1="20" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    <line x1="1" y1="12" x2="4" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    <line x1="20" y1="12" x2="23" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                            </button>
                             </div>
     
                             <div id="navModeSwitcher" class="nav-mode-switcher hidden">
