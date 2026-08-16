@@ -4146,17 +4146,11 @@ function mapORSManeuverToType(type) {
     return typeMap[type] ?? 'continue';
 }
 
-// Resolves which routing profile to use. 'auto' keeps the old distance-based
-// behavior (walking near campus, driving once far off-campus). Picking
-// Walk/Car/Bike overrides this for every route — single-stop AND multi-stop —
-// until switched back.
+// Walk-only build: Car/Bike buttons were removed, so every route — single-
+// stop AND multi-stop — always resolves to the walking profile regardless
+// of state.travelMode or distance from campus.
 function pickRoutingProfile(startCoords, destCoords) {
-    if (state.travelMode && state.travelMode !== 'auto') {
-        return state.travelMode;
-    }
-    const OFF_CAMPUS_DRIVING_THRESHOLD_M = 500;
-    const straightLineDistance = calculateDistance(startCoords, destCoords);
-    return straightLineDistance > OFF_CAMPUS_DRIVING_THRESHOLD_M ? 'driving-car' : 'foot';
+    return 'foot';
 }
 
 // Label/icon for whichever profile a route was actually calculated with
