@@ -4484,10 +4484,19 @@ async function fetchORSRoute(startCoords, destCoords, profile = 'foot', _isRetry
     const instructions = [];
     (feature.properties.segments || []).forEach(segment => {
         (segment.steps || []).forEach(step => {
+            // ✅ ADD — the coordinate where this maneuver actually happens
+            // (way_points[0] is this step's start index into the geometry
+            // array). Nothing currently reads this except voice-navigation.js,
+            // which needs it to know how far the user is from the NEXT turn —
+            // 'distance' alone only says how long the step itself is.
+            const wp = Array.isArray(step.way_points) ? step.way_points[0] : null;
+            const stepLocation = (wp != null && coordinates[wp]) ? coordinates[wp] : null;
+
             instructions.push({
                 type: mapORSManeuverToType(step.type),
                 road: step.name,
-                distance: step.distance
+                distance: step.distance,
+                location: stepLocation
             });
         });
     });
@@ -4584,6 +4593,10 @@ async function refreshActiveRouteForModeChange() {
             profile: routingProfile,
             destination: destination
         };
+
+        // ✅ ADD — new instructions for the new mode, so voice guidance
+        // resets to the first upcoming turn instead of speaking stale ones.
+        document.dispatchEvent(new CustomEvent('navRouteStarted', { detail: { route: state.currentRoute } }));
 
         drawRouteLine(route.coordinates, routeColor);
         addAnimatedOverlay(route.coordinates);
@@ -4780,6 +4793,11 @@ async function navigateToSelected() {
             // route to visually snap to whatever building was last tapped.
             destination: destination
         };
+
+        // ✅ ADD — tells voice-navigation.js a route is ready. That file
+        // owns everything about turn-by-turn speech; this is the entire
+        // interface into it, no other coupling.
+        document.dispatchEvent(new CustomEvent('navRouteStarted', { detail: { route: state.currentRoute } }));
 
         drawRouteLine(route.coordinates, routeColor);
         addAnimatedOverlay(route.coordinates);
@@ -5364,7 +5382,10 @@ function clearRoute() {
     state.currentRoute = null;
     state.isRoomNavigation = false;
     state._routeRecordedThisNav = false;
-    
+
+    // ✅ ADD — voice-navigation.js stops announcing and hides its UI.
+    document.dispatchEvent(new CustomEvent('navRouteCleared'));
+
     document.getElementById('routeInfo').classList.add('hidden');
 }
 
@@ -5410,7 +5431,10 @@ function clearRouteCompletely() {
     state.currentRoute = null;
     state.isRoomNavigation = false;
     state._routeRecordedThisNav = false;
-    
+
+    // ✅ ADD — same as clearRoute() above.
+    document.dispatchEvent(new CustomEvent('navRouteCleared'));
+
     document.getElementById('routeInfo').classList.add('hidden');
     hideNavigationModeSwitcher();
     closeVirtualTour();
@@ -5668,6 +5692,13 @@ function startNavigationLocationWatch() {
                     addStartDottedLine3D([smoothedLat, smoothedLng], state.currentRoute.coordinates);
                 }
             }
+
+            // ✅ ADD — final smoothed/snapped fix for this tick. This is the
+            // ENTIRE feed voice-navigation.js gets; it never reads GPS,
+            // state.userLocation, or the Kalman filter directly.
+            document.dispatchEvent(new CustomEvent('navLocationUpdate', {
+                detail: { lat: smoothedLat, lng: smoothedLng, accuracy }
+            }));
         },
         (error) => console.warn('Navigation location watch error:', error.message),
         options
