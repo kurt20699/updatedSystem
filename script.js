@@ -148,6 +148,21 @@ function createAccuracyCircleGeoJSON(lng, lat, radiusMeters, points = 64) {
 // 10°) rotates +20°, never spins the "long way around" through 180°.
 const headingAnim = { current: null, target: null, rafId: null };
 
+// ── GPS location filter — outlier rejection + Kalman smoothing ───────────
+// Lives in location-filter.js (loaded before this file). Falls back to a
+// pass-through stub if that file failed to load for any reason, so a
+// missing/broken script tag degrades gracefully instead of crashing
+// location tracking entirely.
+const locationFilter = window.LocationFilter
+    ? window.LocationFilter.createLocationFilter({
+        outlierOptions: { baseThresholdMeters: 30, accuracyMultiplier: 2 },
+        kalmanOptions: { processNoise: 3 } // meters/sec — roughly a brisk walking pace
+    })
+    : {
+        process: (lat, lng) => ({ lat, lng, accuracy: null }),
+        reset: () => {}
+    };
+
 // GPS heading readings get noisy/unreliable below walking speed — filtering
 // them out below this threshold is what stops the beam from jittering
 // around while the user is essentially stationary.
@@ -5103,79 +5118,43 @@ function startNavigationLocationWatch() {
             const lng = pos.coords.longitude;
             const accuracy = pos.coords.accuracy;
 
-            // ✅ Reject wildly imprecise pings outright (cell/wifi-tower
-            // fallback readings bleeding through) — these are what cause the
-            // dot to visibly teleport rather than drift.
-            const MAX_ACCEPTABLE_ACCURACY = 40; // meters — below this, full trust
-            const POOR_ACCURACY_FLOOR = 150;      // meters — below this, trust decays toward a minimum
-            const MIN_ACCURACY_TRUST = 0.05;      // even a terrible reading still nudges the dot a little
-
             // ✅ Sanity check: during an active multi-stop trip, a GPS reading
             // that lands far outside the campus boundary is more likely to be
             // indoor/GPS drift (or testing away from campus) than an actual
-            // location change — trust it for single-destination navigation
-            // (you may legitimately be approaching from outside a gate), but
-            // during multi-stop, ignore it and keep using the last known-good
-            // location (an arrived stop, or the last trusted GPS fix) instead
-            // of letting a bogus reading hijack the route mid-trip.
-            // ✅ Instead of freezing on an out-of-boundary reading during
-            // multi-stop, keep updating — just trust it far less. A single
-            // drift ping now barely nudges the dot rather than being thrown
-            // away (which used to freeze it) or fully accepted (which could
-            // let bad drift yank the route off course).
-            let boundaryTrustPenalty = 1; // 1 = normal trust, smaller = less trust
+            // location change. Rather than hand-dampening it ourselves, we
+            // express "trust this fix less" as an accuracy inflation factor
+            // and let the Kalman filter (location-filter.js) weight it down
+            // naturally — same intent as before, just no longer a bespoke
+            // formula living in this file.
+            let boundaryAccuracyInflation = 1; // 1 = normal trust, higher = less trust
             if (state.multiStop.active) {
                 const campus = campusData[state.currentCampus];
                 const inside = !campus?.boundary || isPointInsideBoundary([lat, lng], campus.boundary);
                 if (!inside) {
                     console.warn(`GPS reading outside campus boundary during multi-stop trip — dampened, not dropped (${lat}, ${lng})`);
-                    boundaryTrustPenalty = 0.15; // still moves the dot, just slowly
+                    boundaryAccuracyInflation = 6; // treat as if ~6x less accurate — still nudges the dot, just barely
                 }
             }
 
-            // ✅ Never fully drop a reading, no matter how poor — instead trust
-            // decays smoothly down to a small floor. A ±300m cell-tower-only
-            // ping now still nudges the dot a tiny bit rather than freezing
-            // it, but can't hijack it the way a full-trust jump would.
-            let accuracyTrustPenalty = 1;
-            if (accuracy > MAX_ACCEPTABLE_ACCURACY) {
-                const range = POOR_ACCURACY_FLOOR - MAX_ACCEPTABLE_ACCURACY;
-                const over = Math.min(accuracy - MAX_ACCEPTABLE_ACCURACY, range);
-                const decay = 1 - (over / range); // 1 → 0 as accuracy worsens toward the floor
-                accuracyTrustPenalty = MIN_ACCURACY_TRUST + (1 - MIN_ACCURACY_TRUST) * decay;
-            }
+            // ✅ Outlier rejection + Kalman smoothing (location-filter.js).
+            // A single wild spike (GPS multipath off a nearby building) is
+            // held back until a follow-up fix confirms it's real movement;
+            // otherwise the filter blends this fix in, weighted by its own
+            // accuracy and the filter's current uncertainty — replacing the
+            // old hand-tuned SMOOTHING/CATCH_UP_DISTANCE constants entirely.
+            const filtered = locationFilter.process(
+                lat, lng, accuracy,
+                pos.timestamp || Date.now(),
+                boundaryAccuracyInflation
+            );
 
-            // ✅ Smooth toward the new reading instead of snapping straight to
-            // it, weighted by how much we trust this particular fix — a
-            // precise reading pulls the dot most of the way, a shaky one
-            // barely moves it. Skipped on the very first fix, since there's
-            // nothing yet to smooth from.
-            let smoothedLat = lat;
-            let smoothedLng = lng;
-            if (state.userLocation) {
-                let SMOOTHING = smoothingFactorForAccuracy(accuracy, MAX_ACCEPTABLE_ACCURACY) * boundaryTrustPenalty * accuracyTrustPenalty;
+            // Rejected as a likely one-off spike — skip this update
+            // entirely rather than let it touch the marker, dead
+            // reckoning, or route/multi-stop logic.
+            if (!filtered) return;
 
-                // ✅ Don't let stacked distrust make convergence glacially
-                // slow when the user has genuinely moved a real distance —
-                // a big gap between the raw fix and the displayed dot is far
-                // more likely to mean "I actually walked here" than "this is
-                // noise", so catch up faster instead of crawling toward the
-                // real position for minutes.
-                const rawGapMeters = calculateDistance(
-                    [state.userLocation.lat, state.userLocation.lng],
-                    [lat, lng]
-                );
-                const CATCH_UP_DISTANCE = 15; // meters — beyond this, trust the movement over the accuracy penalty
-                if (rawGapMeters > CATCH_UP_DISTANCE) {
-                    SMOOTHING = Math.max(SMOOTHING, 0.5);
-                }
-
-                // Never let combined distrust fully stall convergence either
-                SMOOTHING = Math.max(SMOOTHING, 0.2);
-
-                smoothedLat = state.userLocation.lat + (lat - state.userLocation.lat) * SMOOTHING;
-                smoothedLng = state.userLocation.lng + (lng - state.userLocation.lng) * SMOOTHING;
-            }
+            let smoothedLat = filtered.lat;
+            let smoothedLng = filtered.lng;
 
             // ✅ If the reading lands inside a building footprint, nudge it
             // toward the nearest building edge instead — GPS drift into a

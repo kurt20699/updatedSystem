@@ -1,4 +1,4 @@
-const CACHE_NAME = 'prmsu-navigator-v8';
+const CACHE_NAME = 'prmsu-navigator-v9';
 const TILE_CACHE_NAME = 'prmsu-map-tiles-v4';
 
 // App shell files to cache immediately
@@ -10,6 +10,7 @@ const APP_SHELL = [
     './permissions.js',
     './campus-data.js',
     './static-footprints.js',
+    './location-filter.js',
 ];
 
 // Install - cache app shell
