@@ -4163,9 +4163,9 @@ function pickRoutingProfile(startCoords, destCoords) {
 // (not just state.travelMode, since 'auto' resolves differently per leg).
 function getTravelModeLabel(profile) {
     const labels = {
-        'foot': { label: 'Walking Time', icon: '⏱️' },
-        'driving-car': { label: 'Driving Time', icon: '🚗' },
-        'cycling-regular': { label: 'Cycling Time', icon: '🚴' }
+        'foot': { label: 'Estimated Walking Time', icon: '⏱️' },
+        'driving-car': { label: 'Estimated Driving Time', icon: '🚗' },
+        'cycling-regular': { label: 'Estimated Cycling Time', icon: '🚴' }
     };
     return labels[profile] || labels['foot'];
 }
