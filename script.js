@@ -435,11 +435,19 @@ function describeGeoError(error) {
 // most accurate reading seen ({ position, error }). `highAccuracy` controls
 // whether we ask for GPS (slower, precise) or network/WiFi-based positioning
 // (faster first fix, coarser — used as a fallback when GPS is slow/unavailable).
-function watchPositionOnce({ highAccuracy, waitMs, desiredAccuracy }) {
+//
+// ✅ `goodEnoughAccuracy`/`goodEnoughAfterMs` let a merely-decent fix short-
+// circuit the wait instead of always holding out for `desiredAccuracy`. The
+// live watchPosition + Kalman filter (started right after acquisition)
+// keeps refining the position in real time anyway, so the first fix doesn't
+// need to be perfect — it just needs to be good enough to start showing the
+// user something and let route/distance calculation begin.
+function watchPositionOnce({ highAccuracy, waitMs, desiredAccuracy, goodEnoughAccuracy, goodEnoughAfterMs }) {
     return new Promise((resolve) => {
         let best = null;
         let watchId = null;
         let settled = false;
+        const startedAt = Date.now();
 
         const finish = (result) => {
             if (settled) return;
@@ -464,6 +472,17 @@ function watchPositionOnce({ highAccuracy, waitMs, desiredAccuracy }) {
                         best = position;
                     }
                     if (position.coords.accuracy <= desiredAccuracy) {
+                        finish({ position: best, error: null });
+                        return;
+                    }
+                    // ✅ Don't make the user wait out the full stage timeout
+                    // for an ideal fix if a decent one already showed up —
+                    // accept anything within goodEnoughAccuracy once a short
+                    // grace period has passed, since live tracking keeps
+                    // refining the position afterward regardless.
+                    if (goodEnoughAccuracy &&
+                        position.coords.accuracy <= goodEnoughAccuracy &&
+                        Date.now() - startedAt >= (goodEnoughAfterMs || 0)) {
                         finish({ position: best, error: null });
                     }
                 },
@@ -520,8 +539,14 @@ function acquireAccurateLocation({ desiredAccuracy = 25, maxWaitMs = 7000, onSta
     const notify = (msg) => { if (typeof onStatus === 'function') onStatus(msg); };
 
     const stages = [
-        { highAccuracy: true, waitMs: maxWaitMs, label: 'Getting your precise location…' },
-        { highAccuracy: true, waitMs: Math.max(maxWaitMs, 8000), label: 'Still trying for a GPS fix…' },
+        // ✅ goodEnoughAccuracy/goodEnoughAfterMs: accept a decent (not
+        // necessarily ideal) fix after a short grace period rather than
+        // always waiting the full stage timeout — this is the main lever
+        // for making "Find My Location" feel fast, since most devices
+        // report a usable ~30-60m fix within 1-3s, well before they'd
+        // ever tighten to the old fixed 25m threshold.
+        { highAccuracy: true, waitMs: maxWaitMs, label: 'Getting your precise location…', goodEnoughAccuracy: desiredAccuracy * 2, goodEnoughAfterMs: 1500 },
+        { highAccuracy: true, waitMs: Math.max(maxWaitMs, 8000), label: 'Still trying for a GPS fix…', goodEnoughAccuracy: desiredAccuracy * 3, goodEnoughAfterMs: 2000 },
         { highAccuracy: false, waitMs: 10000, label: 'Falling back to approximate location…' }
     ];
 
@@ -534,7 +559,9 @@ function acquireAccurateLocation({ desiredAccuracy = 25, maxWaitMs = 7000, onSta
             lastResult = await watchPositionOnce({
                 highAccuracy: stage.highAccuracy,
                 waitMs: stage.waitMs,
-                desiredAccuracy
+                desiredAccuracy,
+                goodEnoughAccuracy: stage.goodEnoughAccuracy,
+                goodEnoughAfterMs: stage.goodEnoughAfterMs
             });
 
             // Permission denials can't be fixed by retrying or falling back —
@@ -5391,8 +5418,6 @@ function setUserLocation() {
         // real fix — just let the accuracy figure speak for itself rather
         // than a hard-coded "found!" message implying GPS precision.
         showNotification(`Location found! Accuracy: ±${Math.round(accuracy)}m`, 'success');
-
-        startNavigationLocationWatch();
     });
 }
 function toggleAccessiblePaths() {
