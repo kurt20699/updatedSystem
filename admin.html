@@ -707,6 +707,9 @@
     <div class="nav-item" onclick="showPage('alerts',this)">
       <span class="nav-icon">📢</span> Campus Alerts
     </div>
+    <div class="nav-item" onclick="showPage('tips',this)">
+      <span class="nav-icon">💡</span> Campus Tips
+    </div>
     <div class="nav-item" onclick="showPage('buildings',this)">
       <span class="nav-icon">🏛️</span> Buildings
     </div>
@@ -842,6 +845,39 @@
         </div>
         <div class="items-list" id="annList">
           <div class="loading-msg">Loading announcements…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CAMPUS TIPS ── -->
+    <div class="page-content" id="page-tips">
+      <div>
+        <div class="section-eyebrow">Manage</div>
+        <div class="section-heading">Campus Tips</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <div class="panel-title-icon" style="background:#dbeafe;">💡</div>
+            <span id="tipFormTitle">Post Campus Tip</span>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadCampusTips()">↻ Refresh</button>
+        </div>
+        <div class="panel-form">
+          <div class="form-group">
+            <label>Tip Content *</label>
+            <input id="tipContent" class="form-input" type="text" maxlength="200"
+                placeholder="e.g. The Library is located near the main academic buildings.">
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-ghost" id="btnCancelTipEdit" onclick="cancelTipEdit()" style="display:none;">Cancel</button>
+            <button class="btn btn-ghost" id="btnClearTip" onclick="clearTipForm()">Clear</button>
+            <button class="btn btn-primary" id="btnPostTip" onclick="postCampusTip()">💡 Post Tip</button>
+          </div>
+        </div>
+        <div class="items-list" id="tipsList">
+          <div class="loading-msg">Loading tips…</div>
         </div>
       </div>
     </div>
@@ -1418,7 +1454,7 @@
   updateClock();setInterval(updateClock,1000);
 
   // ── NAVIGATION ──
-  const PAGE_TITLES={overview:'Overview',alerts:'Campus Alerts',buildings:'Buildings',rooms:'Rooms',trees:'Trees',users:'Users',analytics:'Analytics'};
+  const PAGE_TITLES={overview:'Overview',alerts:'Campus Alerts',tips:'Campus Tips',buildings:'Buildings',rooms:'Rooms',trees:'Trees',users:'Users',analytics:'Analytics'};
 
   // ✅ Clears transient Manage Buildings UI state (unsaved Add/Edit form +
   // search/filter inputs) without touching any saved building record.
@@ -1533,6 +1569,12 @@
       clearAnnForm();
     }
 
+    // Same behavior leaving Manage Campus Tips — discard any unsaved
+    // Post/Edit form input so returning later always starts clean.
+    if (previousPageId === 'tips' && id !== 'tips') {
+      cancelTipEdit();
+    }
+
     // ✅ Same behavior leaving Manage Users. There's no Add/Edit User form
     // here — just the search box, role filter, and sort order on the All
     // Users table — so reset those three back to their defaults. No saved
@@ -1546,6 +1588,7 @@
     if(id==='overview') loadStats();
     if(id==='users') loadActiveUsersList(); // ✅ MOVED here from Overview
     if(id==='alerts') loadAnnouncements();
+    if(id==='tips') loadCampusTips();
     if(id==='buildings') loadBuildings();
     if(id==='rooms') loadRooms();
     if(id==='trees') loadTreesPage();
@@ -1806,6 +1849,17 @@
         if(!res.ok||!data.ok)throw new Error(data.error||'Delete failed');
         showToast('Deleted successfully','success');
         loadAnnouncements(true); // background refresh — toast already gives feedback; avoids racing the SSE echo
+      }catch(err){showToast(err.message,'error');}
+      return;
+    }
+    if(type==='tip'){
+      try{
+        const res=await adminFetch(`/api/admin/campus-tips/${id}`,{method:'DELETE'});
+        const data=await res.json();
+        if(!res.ok||!data.ok)throw new Error(data.error||'Delete failed');
+        showToast('Tip deleted','success');
+        if(pendingTipEditId===id) cancelTipEdit(); // was editing the tip that just got deleted
+        loadCampusTips(true); // background refresh — toast already gives feedback; avoids racing the SSE echo
       }catch(err){showToast(err.message,'error');}
       return;
     }
@@ -2151,6 +2205,99 @@
     document.getElementById('annType').value='info';
     document.getElementById('annExpires').value='';
     updateAnnPlaceholder()
+  }
+
+  // ── CAMPUS TIPS ──
+  // Same single-flight + background-refresh pattern as loadAnnouncements(),
+  // so posting/editing/deleting a tip and the resulting SSE echo don't race
+  // and cause a visible list "flash".
+  let _tipsRefreshPending = null;
+  async function loadCampusTips(isBackgroundRefresh = false){
+    if (_tipsRefreshPending) return _tipsRefreshPending;
+    _tipsRefreshPending = _loadCampusTipsInner(isBackgroundRefresh)
+      .finally(() => { _tipsRefreshPending = null; });
+    return _tipsRefreshPending;
+  }
+
+  async function _loadCampusTipsInner(isBackgroundRefresh){
+    const list=document.getElementById('tipsList');
+    if(!isBackgroundRefresh){
+      list.innerHTML='<div class="loading-msg">Loading…</div>';
+    }
+    try{
+      const res=await adminFetch('/api/admin/campus-tips');
+      const data=await res.json();
+      const tips=data.tips||[];
+      if(!tips.length){
+        list.innerHTML='<div class="empty-state"><span class="emoji">💡</span>No tips yet.</div>';
+        return;
+      }
+      list.innerHTML=tips.map(t=>`<div class="item-card">
+        <span class="item-badge badge-info">💡 TIP</span>
+        <div class="item-body">
+          <div class="item-title">${escHtml(t.content)}</div>
+          <div class="item-meta">
+            <span>${new Date(t.created_at).toLocaleString()}</span>
+            ${t.created_by?`<span>· by ${escHtml(t.created_by)}</span>`:''}
+          </div>
+        </div>
+        <div class="item-actions">
+          <button class="icon-btn" title="Edit" onclick="openEditTip(${t.id})" data-content="${escHtml(t.content)}">✏️</button>
+          <button class="icon-btn delete" title="Delete" onclick="openDeleteModal('tip',${t.id},this.dataset.label)" data-label="${escHtml(t.content)}">🗑️</button>
+        </div>
+      </div>`).join('');
+    }catch(err){list.innerHTML=`<div class="loading-msg" style="color:#ef4444;">Failed: ${err.message}</div>`;}
+  }
+
+  // null = posting a new tip; a numeric id = editing that existing tip.
+  let pendingTipEditId = null;
+
+  function openEditTip(id){
+    const btn = document.querySelector(`#tipsList button[onclick="openEditTip(${id})"]`);
+    const content = btn?.dataset.content || '';
+    pendingTipEditId = id;
+    document.getElementById('tipContent').value = content;
+    document.getElementById('tipFormTitle').textContent = 'Edit Campus Tip';
+    document.getElementById('btnPostTip').innerHTML = 'Save Changes';
+    document.getElementById('btnCancelTipEdit').style.display = '';
+    document.getElementById('tipContent').focus();
+  }
+
+  function cancelTipEdit(){
+    pendingTipEditId = null;
+    document.getElementById('tipContent').value = '';
+    document.getElementById('tipFormTitle').textContent = 'Post Campus Tip';
+    document.getElementById('btnPostTip').innerHTML = '💡 Post Tip';
+    document.getElementById('btnCancelTipEdit').style.display = 'none';
+  }
+
+  function clearTipForm(){
+    // Clearing while editing just wipes the text field, same as Cancel does
+    // for the rest of the form state — it does not create a duplicate tip
+    // and does not exit edit mode by itself.
+    document.getElementById('tipContent').value = '';
+  }
+
+  async function postCampusTip(){
+    const content=document.getElementById('tipContent').value.trim();
+    if(!content){showToast('Please enter tip content','error');return;}
+    const btn=document.getElementById('btnPostTip');
+    const editingId = pendingTipEditId;
+    btn.disabled=true; btn.textContent = editingId ? 'Saving…' : 'Posting…';
+    try{
+      const res = editingId
+        ? await adminFetch(`/api/admin/campus-tips/${editingId}`,{method:'PUT',body:JSON.stringify({content})})
+        : await adminFetch('/api/admin/campus-tips',{method:'POST',body:JSON.stringify({content})});
+      const data=await res.json();
+      if(!res.ok||!data.ok)throw new Error(data.error||'Save failed');
+      showToast(editingId ? 'Tip updated!' : 'Tip posted!','success');
+      cancelTipEdit();
+      loadCampusTips(true); // background refresh — avoids racing the SSE echo
+    }catch(err){showToast(err.message,'error');}
+    finally{
+      btn.disabled=false;
+      btn.innerHTML = pendingTipEditId ? 'Save Changes' : '💡 Post Tip';
+    }
   }
 
   const ANN_TYPE_PLACEHOLDERS = {
@@ -3316,6 +3463,9 @@
                   switch (data.type) {
                       case 'announcementsChanged':
                           loadAnnouncements(true); // background refresh — already calls loadStats() internally
+                          break;
+                      case 'campusTipsChanged':
+                          loadCampusTips(true);
                           break;
                       case 'activeUsers': {
                           // Update whichever of these is currently in the DOM — Overview's

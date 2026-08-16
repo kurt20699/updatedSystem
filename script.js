@@ -2556,6 +2556,11 @@ function connectRealtimeStream() {
                     case 'mapDataChanged':
                         resyncMapWithDatabase();
                         break;
+                    case 'campusTipsChanged':
+                        if (typeof window.refreshCampusTips === 'function') {
+                            window.refreshCampusTips();
+                        }
+                        break;
                     // 'connected' / heartbeat comment frames: nothing to do.
                 }
             } catch { /* ignore malformed frames */ }

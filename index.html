@@ -235,6 +235,12 @@
                     <div class="main-container">
                         <!-- Sidebar -->
                         <aside class="sidebar" id="sidebar">
+                            <!-- Campus Alerts / Campus Tips tabs -->
+                            <div id="alertsTipsTabs" class="alerts-tips-tabs">
+                                <button type="button" class="alerts-tips-tab active" data-tab="alerts">Campus Alerts</button>
+                                <button type="button" class="alerts-tips-tab" data-tab="tips">Campus Tips</button>
+                            </div>
+
                             <!-- Alert Banner -->
                             <div id="alertBanner" class="alert-banner hidden">
                                 <div class="alert-icon" id="alertIcon">⚠️</div>
@@ -247,6 +253,20 @@
                                     white-space: nowrap;
                                 "></span>
                             </div>
+
+                            <!-- Campus Tips card -->
+                            <div id="campusTipsCard" class="campus-tips-card hidden">
+                                <div class="campus-tips-header">
+                                    <span>💡 Did you know?</span>
+                                    <span id="campusTipsCounter" class="campus-tips-counter"></span>
+                                </div>
+                                <p id="campusTipsText" class="campus-tips-text">Loading tips…</p>
+                                <div class="campus-tips-nav">
+                                    <button type="button" id="campusTipsPrev" class="campus-tips-nav-btn">← Previous</button>
+                                    <button type="button" id="campusTipsNext" class="campus-tips-nav-btn">Next →</button>
+                                </div>
+                            </div>
+
                             
                             
                             <!-- Search Section -->
@@ -638,6 +658,7 @@
         <script src="campus-data.js"></script>
         <script src="static-footprints.js"></script>
         <script src="location-filter.js"></script>
+        <script src="campus-tips.js" defer></script>
         <script src="script.js?v=6"></script>
         <script src="ai-chat-widget.js" defer></script>
         <script src="employee-announcement-widget.js" defer></script>

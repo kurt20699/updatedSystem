@@ -1159,6 +1159,17 @@ function broadcastAnnouncementsChanged() {
   }
 }
 
+// Same pattern as announcements — Admin posts/edits/deletes a Campus Tip,
+// every connected Main App tab gets a tiny ping and re-fetches its tips.
+const campusTipsSseClients = new Set();
+
+function broadcastCampusTipsChanged() {
+  const payload = `data: ${JSON.stringify({ type: "campusTipsChanged", at: Date.now() })}\n\n`;
+  for (const client of campusTipsSseClients) {
+    client.write(payload);
+  }
+}
+
 // ══════════════════════════════════════════
 // 🪪 REAL-TIME PENDING ID VERIFICATION UPDATES (SSE)
 // ══════════════════════════════════════════
@@ -1457,6 +1468,7 @@ app.get("/api/realtime/stream", (req, res) => {
   announcementSseClients.add(res);
   mapDataSseClients.add(res);
   pendingUsersSseClients.add(res);
+  campusTipsSseClients.add(res);
 
   if (!activeUserConnections.has(userId)) {
     activeUserConnections.set(userId, { role, conns: new Set() });
@@ -1473,6 +1485,7 @@ app.get("/api/realtime/stream", (req, res) => {
     announcementSseClients.delete(res);
     mapDataSseClients.delete(res);
     pendingUsersSseClients.delete(res);
+    campusTipsSseClients.delete(res);
     const entry = activeUserConnections.get(userId);
     if (entry) {
       entry.conns.delete(res);
@@ -1553,6 +1566,91 @@ app.delete("/api/announcements/:id", requireAdmin, async (req, res) => {
     const result = await pool.query(`DELETE FROM announcements WHERE id = $1 RETURNING id`, [id]);
     if (!result.rows.length) return res.status(404).json({ ok: false, error: "Announcement not found." });
     broadcastAnnouncementsChanged();
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════
+// 💡 CAMPUS TIPS
+// ══════════════════════════════════════════
+
+// Public — Main App only ever needs active tips.
+app.get("/api/campus-tips", async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM campus_tips WHERE is_active = true ORDER BY created_at DESC`
+    );
+    return res.json({ ok: true, tips: result.rows });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Admin — full list (mirrors GET /api/admin/announcements).
+app.get("/api/admin/campus-tips", requireAdmin, async (_req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM campus_tips ORDER BY created_at DESC`);
+    return res.json({ ok: true, tips: result.rows });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/admin/campus-tips", requireAdmin, async (req, res) => {
+  const { content, adminUserId } = req.body || {};
+  if (!content || !content.trim()) {
+    return res.status(400).json({ ok: false, error: "Tip content is required." });
+  }
+  try {
+    const result = await pool.query(
+      `INSERT INTO campus_tips (content, created_by, is_active)
+       VALUES ($1, $2, true) RETURNING *`,
+      [content.trim(), adminUserId || null]
+    );
+    await logAudit({
+      adminUserId, action: "create", entityType: "campus_tip",
+      entityId: result.rows[0].id, details: result.rows[0]
+    });
+    broadcastCampusTipsChanged();
+    return res.status(201).json({ ok: true, tip: result.rows[0] });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.put("/api/admin/campus-tips/:id", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { content, adminUserId } = req.body || {};
+  if (!content || !content.trim()) {
+    return res.status(400).json({ ok: false, error: "Tip content is required." });
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE campus_tips SET content = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [content.trim(), id]
+    );
+    if (!result.rows.length) return res.status(404).json({ ok: false, error: "Tip not found." });
+    await logAudit({
+      adminUserId, action: "update", entityType: "campus_tip",
+      entityId: id, details: result.rows[0]
+    });
+    broadcastCampusTipsChanged();
+    return res.json({ ok: true, tip: result.rows[0] });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.delete("/api/admin/campus-tips/:id", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { adminUserId } = req.body || {};
+  try {
+    const result = await pool.query(`DELETE FROM campus_tips WHERE id = $1 RETURNING id`, [id]);
+    if (!result.rows.length) return res.status(404).json({ ok: false, error: "Tip not found." });
+    await logAudit({ adminUserId, action: "delete", entityType: "campus_tip", entityId: id });
+    broadcastCampusTipsChanged();
     return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });

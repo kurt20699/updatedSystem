@@ -11,6 +11,7 @@ const APP_SHELL = [
     './campus-data.js',
     './static-footprints.js',
     './location-filter.js',
+    './campus-tips.js',
 ];
 
 // Install - cache app shell
