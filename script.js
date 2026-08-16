@@ -431,6 +431,191 @@ function describeGeoError(error) {
     }
 }
 
+// ── Location permission flow ─────────────────────────────────────────
+// Mirrors the "explain first, then trigger the real OS prompt" pattern
+// apps like Messenger use. This never fakes a permission grant/denial —
+// it only decides WHEN to call the real navigator.geolocation API, and
+// shows explanatory UI around that call. The actual grant/deny always
+// comes from the browser/OS itself.
+let _geoPermissionPanelStyleInjected = false;
+function ensureGeoPermissionPanelStyle() {
+    if (_geoPermissionPanelStyleInjected) return;
+    _geoPermissionPanelStyleInjected = true;
+    const style = document.createElement('style');
+    style.id = 'geo-permission-panel-styles';
+    style.textContent = `
+        #geoPermissionOverlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15,58,82,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 4000;
+        }
+        #geoPermissionModal, #geoBlockedPanel {
+            background: #fff;
+            border-radius: 14px;
+            width: min(360px, calc(100vw - 32px));
+            padding: 20px 22px;
+            box-shadow: 0 8px 32px rgba(15,58,82,0.25);
+            font-family: system-ui, sans-serif;
+        }
+        #geoPermissionModal h4, #geoBlockedPanel h4 {
+            margin: 0 0 8px;
+            font-size: 15px;
+            color: #0f3a52;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        #geoPermissionModal p, #geoBlockedPanel p {
+            margin: 0 0 10px;
+            font-size: 12.5px;
+            color: #374151;
+            line-height: 1.5;
+        }
+        #geoPermissionModal ul, #geoBlockedPanel ol {
+            margin: 0 0 14px;
+            padding-left: 18px;
+            font-size: 12.5px;
+            color: #374151;
+            line-height: 1.6;
+        }
+        #geoPermissionActions, #geoBlockedActions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        #geoPermissionActions button, #geoBlockedActions button {
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        #geoPermissionNotNow, #geoBlockedDismiss {
+            background: transparent;
+            color: #64748b;
+            border: 1.5px solid #e2e8f0 !important;
+        }
+        #geoPermissionAllow {
+            background: #1e3a8a;
+            color: #fff;
+        }
+        #geoBlockedPanel {
+            position: fixed;
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%);
+            z-index: 4000;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// Shows the explainer BEFORE the real browser prompt. Tapping "Allow
+// Location" is what fires onAllow(), which is what actually calls
+// navigator.geolocation — this modal itself has no power to grant
+// anything.
+function showLocationPermissionExplainer(onAllow, onNotNow) {
+    ensureGeoPermissionPanelStyle();
+    document.getElementById('geoPermissionOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'geoPermissionOverlay';
+    overlay.innerHTML = `
+        <div id="geoPermissionModal">
+            <h4>📍 Allow PRMSU Smart Campus Navigator to access your location?</h4>
+            <p>Your location is used for:</p>
+            <ul>
+                <li>Find My Location</li>
+                <li>Live location tracking while you walk</li>
+                <li>Turn-by-turn navigation and directions</li>
+            </ul>
+            <div id="geoPermissionActions">
+                <button type="button" id="geoPermissionNotNow">Not Now</button>
+                <button type="button" id="geoPermissionAllow">Allow Location</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    document.getElementById('geoPermissionNotNow').addEventListener('click', () => {
+        overlay.remove();
+        onNotNow?.();
+    });
+    document.getElementById('geoPermissionAllow').addEventListener('click', () => {
+        overlay.remove();
+        onAllow(); // real navigator.geolocation call happens inside this, from THIS click
+    });
+}
+
+function getGeoBlockedSteps() {
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPhone|iPad|iPod/.test(ua);
+    const isAndroid = /Android/.test(ua);
+
+    if (isIOS) {
+        return [
+            'Open the Settings app on your device.',
+            'Scroll down and tap Safari (or your browser).',
+            'Tap Location, then choose "Allow" or "Ask Next Time".',
+            'Reload this page and try again.'
+        ];
+    }
+    if (isAndroid) {
+        return [
+            'Tap the 🔒 lock icon next to the address bar.',
+            'Tap Permissions, then Location.',
+            'Choose "Allow" and reload this page.',
+            'If it\'s still blocked, check Settings > Apps > (your browser) > Permissions > Location.'
+        ];
+    }
+    return [
+        'Click the 🔒 lock icon in the address bar.',
+        'Find Location in the site permissions list.',
+        'Change it to "Allow" and reload this page.'
+    ];
+}
+
+// Persistent guidance panel for an already-denied origin. Retrying
+// navigator.geolocation here would just return PERMISSION_DENIED again
+// silently, so this points the user at the one place that can actually
+// fix it: their own settings.
+function showLocationBlockedInstructions() {
+    ensureGeoPermissionPanelStyle();
+    document.getElementById('geoBlockedPanel')?.remove();
+
+    const steps = getGeoBlockedSteps();
+    const panel = document.createElement('div');
+    panel.id = 'geoBlockedPanel';
+    panel.innerHTML = `
+        <h4>📍 Location is blocked for this site</h4>
+        <p>Your browser has location access turned off for this site. This can only be fixed in your settings — reloading or retrying won't help.</p>
+        <ol>${steps.map(s => `<li>${s}</li>`).join('')}</ol>
+        <div id="geoBlockedActions">
+            <button type="button" id="geoBlockedDismiss">Got it</button>
+        </div>
+    `;
+    document.body.appendChild(panel);
+    document.getElementById('geoBlockedDismiss').addEventListener('click', () => panel.remove());
+}
+
+// Resolves to 'granted' | 'denied' | 'prompt' | 'unsupported'. Centralizes
+// the Permissions API check so this stays the single source of truth
+// instead of duplicating navigator.permissions logic at each call site.
+function getGeoPermissionState() {
+    if (!navigator.permissions || !navigator.permissions.query) {
+        return Promise.resolve('unsupported');
+    }
+    return navigator.permissions.query({ name: 'geolocation' })
+        .then((status) => status.state)
+        .catch(() => 'unsupported');
+}
+
 // ── Location-blocked instructions panel ─────────────────────────────
 // A hard PERMISSION_DENIED (error.code === 1) can never be fixed by
 // retrying — the browser/OS has the origin blocked and only the user
@@ -5533,6 +5718,24 @@ function setUserLocation() {
         return;
     }
 
+    // ── Permission gate — checked only now, the first time location is
+    // actually needed. Never re-prompts once granted; never retries a
+    // hard denial (the browser won't re-prompt a denied origin anyway).
+    getGeoPermissionState().then((permState) => {
+        if (permState === 'denied') {
+            showLocationBlockedInstructions();
+        } else if (permState === 'granted') {
+            beginLocationAcquisition(btn);
+        } else {
+            // 'prompt' (never asked) or 'unsupported' (older Safari without
+            // the Permissions API) — explain first, then trigger the real
+            // native browser prompt only when the user taps Allow.
+            showLocationPermissionExplainer(() => beginLocationAcquisition(btn));
+        }
+    });
+}
+
+function beginLocationAcquisition(btn) {
     if (btn) {
         btn.disabled = true;
         btn.classList.add('is-loading');
@@ -5551,8 +5754,13 @@ function setUserLocation() {
         }
 
         if (!position) {
-            // Only shown after every retry/fallback stage has been exhausted.
-            showNotification(error?.message || 'Unable to get your location. Please check your device settings and try again.', 'error');
+            // A hard denial can't be fixed by retrying — show the settings
+            // panel instead of a toast that just disappears in a few seconds.
+            if (error && error.code === 1) {
+                showLocationBlockedInstructions();
+            } else {
+                showNotification(error?.message || 'Unable to get your location. Please check your device settings and try again.', 'error');
+            }
             console.error('Geolocation error:', error);
             return;
         }
@@ -5576,6 +5784,7 @@ function setUserLocation() {
         showNotification(`Location found! Accuracy: ±${Math.round(accuracy)}m`, 'success');
     });
 }
+
 function toggleAccessiblePaths() {
     state.accessibleOnly = !state.accessibleOnly;
     showNotification(state.accessibleOnly ? 'Showing accessible routes only' : 'Showing all routes');
