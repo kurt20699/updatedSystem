@@ -3343,38 +3343,6 @@ button,
     }
 }
 
-/* ── Travel mode selector (Walk / Car / Bike) ── */
-.travel-mode-selector {
-    display: flex;
-    gap: 8px;
-    padding: 0 14px 12px;
-    flex-shrink: 0;
-}
-.travel-mode-btn {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    padding: 7px 6px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #2c5aa0;
-    background: #f0f7ff;
-    border: 1.5px solid #dce8f7;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.travel-mode-btn:hover {
-    background: #e2eefe;
-}
-.travel-mode-btn.active {
-    background: #2c5aa0;
-    border-color: #2c5aa0;
-    color: #fff;
-}
-
 /* ── Visitor check-in section on auth screen ── */
 .visitor-checkin-section {
     margin-top: 20px;

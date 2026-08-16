@@ -2238,11 +2238,6 @@ function setupEventListeners() {
             navMode3d.addEventListener('click', toggleNav3D);
         }
 
-        // ✅ Travel mode selector (Walk / Car / Bike)
-        document.querySelectorAll('#travelModeSelector .travel-mode-btn').forEach(btn => {
-            btn.addEventListener('click', () => setTravelMode(btn.dataset.mode));
-        });
-
         const goBackRouteBtn = document.getElementById('goBackRoute');
         if (goBackRouteBtn) {
             goBackRouteBtn.addEventListener('click', goBackFromRoute);
@@ -4162,20 +4157,6 @@ function getTravelModeLabel(profile) {
         'cycling-regular': { label: 'Estimated Cycling Time', icon: '🚴' }
     };
     return labels[profile] || labels['foot'];
-}
-
-// Wired to the Walk / Car / Bike buttons. Updates the selection, re-highlights
-// the buttons, and recalculates the route currently on screen (if any).
-function setTravelMode(mode) {
-    state.travelMode = mode;
-
-    document.querySelectorAll('#travelModeSelector .travel-mode-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.mode === mode);
-    });
-
-    if (state.currentRoute && state.currentRoute.destination) {
-        refreshActiveRouteForModeChange();
-    }
 }
 
 // ✅ Monotonically increasing token — lets refreshActiveRouteForModeChange
