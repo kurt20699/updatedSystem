@@ -4184,10 +4184,21 @@ function setTravelMode(mode) {
     }
 }
 
+// ✅ Monotonically increasing token — lets refreshActiveRouteForModeChange
+// detect and discard STALE responses when the user switches travel modes
+// again before the previous request finishes. Without this, rapid
+// Walk→Car→Bike switching could let an older, slower response (success OR
+// failure) land last and silently overwrite the correct, newer route —
+// which is what made the Route Details section appear stuck or show a
+// mismatched error after switching modes several times.
+let routeRequestSeq = 0;
+
 // Recalculates the currently displayed route for the SAME destination after
 // a travel-mode switch — lighter than navigateToSelected() since it skips
 // modal-closing, location-watch restart, and route-history recording.
 async function refreshActiveRouteForModeChange() {
+    const myRequestId = ++routeRequestSeq;
+
     const destination = state.currentRoute.destination;
     const startCoords = state.userLocation
         ? [state.userLocation.lat, state.userLocation.lng]
@@ -4200,6 +4211,11 @@ async function refreshActiveRouteForModeChange() {
 
     try {
         const route = await fetchORSRoute(startCoords, destination.coords, routingProfile);
+
+        // A newer mode switch happened while this request was still in
+        // flight — this response is stale, discard it without touching
+        // state, the map, or the Route Details panel.
+        if (myRequestId !== routeRequestSeq) return;
 
         state.currentRoute = {
             coordinates: route.coordinates,
@@ -4221,7 +4237,12 @@ async function refreshActiveRouteForModeChange() {
 
         showCustomRouteInfo(route, destination, routingProfile);
     } catch (err) {
-        showNotification('Could not recalculate route for this travel mode.', 'error');
+        // Same staleness check on the failure path — an old, abandoned
+        // request's error must not surface after the user has already
+        // moved on to (and possibly successfully loaded) a different mode.
+        if (myRequestId !== routeRequestSeq) return;
+
+        showNotification('Could not recalculate route for this travel mode. Try a different mode.', 'error');
         drawFallbackRoute(startCoords, destination);
     }
 }
