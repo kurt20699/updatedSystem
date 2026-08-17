@@ -5201,30 +5201,71 @@ function showCustomRouteInfo(route, destination, profile) {
     routeInfo.classList.remove('hidden');
 }
 
-// Get direction icon based on instruction type
+// ✅ Single source of truth for instruction wording. getDirectionIcon()
+// (the Turn-by-turn Directions panel, showCustomRouteInfo() above) and
+// buildInstructionText() (voice-navigation.js) BOTH read from this one
+// table — there is no second copy of instruction phrasing anywhere, so
+// the panel and the spoken guidance can never drift out of sync.
+const INSTRUCTION_LABELS = {
+    'turn-left': { icon: '⬅️', text: 'Turn left' },
+    'turn-right': { icon: '➡️', text: 'Turn right' },
+    'turn-slight-left': { icon: '↩️', text: 'Slight left' },
+    'turn-slight-right': { icon: '↪️', text: 'Slight right' },
+    'turn-sharp-left': { icon: '↖️', text: 'Sharp left' },
+    'turn-sharp-right': { icon: '↗️', text: 'Sharp right' },
+    'straight': { icon: '⬆️', text: 'Continue straight' },
+    'uturn': { icon: '↩️', text: 'Make a U-turn' },
+    'arrive': { icon: '🎯', text: 'Arrive' },
+    'depart': { icon: '🚶', text: 'Depart' },
+    'merge': { icon: '↗️', text: 'Merge' },
+    'on-ramp': { icon: '↗️', text: 'Take ramp' },
+    'off-ramp': { icon: '↘️', text: 'Take exit' },
+    'fork': { icon: '↗️', text: 'Keep' },
+    'end-of-road': { icon: '⬆️', text: 'Continue' },
+    'continue': { icon: '⬆️', text: 'Continue' },
+    'roundabout': { icon: '🔄', text: 'Roundabout' }
+};
+
+// Get direction icon based on instruction type — used by the Turn-by-turn
+// Directions panel. Unchanged behavior/output, now sourced from the table
+// above instead of its own separate copy.
 function getDirectionIcon(type) {
-    const directions = {
-        'turn-left': '⬅️ Turn left',
-        'turn-right': '➡️ Turn right',
-        'turn-slight-left': '↩️ Slight left',
-        'turn-slight-right': '↪️ Slight right',
-        'turn-sharp-left': '↖️ Sharp left',
-        'turn-sharp-right': '↗️ Sharp right',
-        'straight': '⬆️ Continue straight',
-        'uturn': '↩️ Make U-turn',
-        'arrive': '🎯 Arrive',
-        'depart': '🚶 Depart',
-        'merge': '↗️ Merge',
-        'on-ramp': '↗️ Take ramp',
-        'off-ramp': '↘️ Take exit',
-        'fork': '↗️ Keep',
-        'end-of-road': '⬆️ Continue',
-        'continue': '⬆️ Continue',
-        'roundabout': '🔄 Roundabout'
-    };
-    
-    return directions[type] || '➡️';
+    const entry = INSTRUCTION_LABELS[type];
+    return entry ? `${entry.icon} ${entry.text}` : '➡️';
 }
+
+// ✅ ADD — plain-language spoken phrasing for a turn-by-turn step, built
+// from the EXACT same INSTRUCTION_LABELS table the panel uses above, plus
+// the same `step.road` field the panel already renders as "on {road}".
+// This is the ONLY function that turns an instruction into speech text —
+// voice-navigation.js calls this instead of maintaining its own wording.
+//
+// distanceMetersOverride lets the caller speak the user's LIVE remaining
+// distance to the maneuver (what voice guidance needs) instead of the
+// step's fixed segment length (what the panel shows) — only the NUMBER
+// differs, the wording itself is identical either way.
+//
+// destinationName mirrors what showCustomRouteInfo() does for the final
+// step: the panel doesn't speak the raw 'arrive' label, it prints
+// "🎯 Arrive at {destination.name}" — so the spoken version says the same.
+function buildInstructionText(step, distanceMetersOverride, destinationName) {
+    if (!step) return '';
+
+    if (step.type === 'arrive') {
+        return destinationName
+            ? `You have arrived at ${destinationName}.`
+            : 'You have arrived at your destination.';
+    }
+
+    const entry = INSTRUCTION_LABELS[step.type];
+    const label = entry ? entry.text : 'Continue';
+    const roadPart = step.road ? ` on ${step.road}` : '';
+    const dist = (typeof distanceMetersOverride === 'number') ? distanceMetersOverride : step.distance;
+    const distPart = (typeof dist === 'number' && dist > 0) ? ` in ${Math.round(dist)} meters` : '';
+
+    return `${label}${roadPart}${distPart}.`;
+}
+window.buildInstructionText = buildInstructionText;
 
 // Fallback route if routing fails
 function drawFallbackRoute(start, destination, profile = 'foot') {

@@ -253,47 +253,27 @@
     }
 
     // ── Phrasing ────────────────────────────────────────────────
-    function roundDistance(meters) {
-        return Math.max(0, Math.round(meters / 5) * 5); // nearest 5m — avoids false precision like "47 meters"
-    }
-
-    function phraseForInstruction(instr, distanceMeters) {
-        const dist = roundDistance(distanceMeters);
-        const distPhrase = dist > 5 ? `in ${dist} meters` : 'now';
-        switch (instr.type) {
-            case 'turn-left':
-            case 'turn-slight-left':
-                return `Turn left ${distPhrase}.`;
-            case 'turn-sharp-left':
-                return `Sharp left turn ${distPhrase}.`;
-            case 'turn-right':
-            case 'turn-slight-right':
-                return `Turn right ${distPhrase}.`;
-            case 'turn-sharp-right':
-                return `Sharp right turn ${distPhrase}.`;
-            case 'uturn':
-                return `Make a U-turn ${distPhrase}.`;
-            case 'roundabout':
-                return `Enter the roundabout ${distPhrase}.`;
-            case 'straight':
-            case 'continue':
-            case 'depart':
-                return `Continue straight ${distPhrase}.`;
-            default:
-                return `Continue ${distPhrase}.`;
+    // ✅ Deliberately NOT reimplemented here. The spoken text must be the
+    // exact same wording as the Turn-by-turn Directions panel, so it comes
+    // from script.js's buildInstructionText() — the ONE function that
+    // knows how to turn an instruction into words (see script.js,
+    // INSTRUCTION_LABELS / buildInstructionText, right next to
+    // getDirectionIcon() which the panel itself calls). This file only
+    // decides WHEN to speak and WHICH distance number to pass in; script.js
+    // decides WHAT WORDS to use. If that function isn't available (e.g.
+    // this file loaded before script.js, or script.js is an older
+    // version), this file logs a warning and stays silent rather than
+    // falling back to its own guessed phrasing — a silent gap is safer
+    // than the panel and the voice saying two different things.
+    function textFor(instr, distanceMetersOverride) {
+        if (typeof window.buildInstructionText !== 'function') {
+            if (!textFor._warned) {
+                console.warn('Voice Navigation: window.buildInstructionText is missing — update script.js. Voice guidance will stay silent.');
+                textFor._warned = true;
+            }
+            return null;
         }
-    }
-
-    function shortLabel(instr) {
-        switch (instr.type) {
-            case 'turn-left': case 'turn-slight-left': return 'Turn left';
-            case 'turn-sharp-left': return 'Sharp left';
-            case 'turn-right': case 'turn-slight-right': return 'Turn right';
-            case 'turn-sharp-right': return 'Sharp right';
-            case 'uturn': return 'U-turn';
-            case 'roundabout': return 'Roundabout';
-            default: return 'Continue straight';
-        }
+        return window.buildInstructionText(instr, distanceMetersOverride, route?.destination?.name);
     }
 
     // ── Local geometry helper — deliberately self-contained rather than
@@ -365,16 +345,25 @@
         if (currentInstr.type === 'arrive') {
             if (dist <= ARRIVAL_DISTANCE_METERS && !arrivedAnnounced) {
                 arrivedAnnounced = true;
-                speakOnce('You have arrived at your destination.');
+                // ✅ Same "You have arrived at {destination}." text the panel
+                // renders as "🎯 Arrive at {destination.name}" — sourced from
+                // script.js, not hardcoded here.
+                const text = textFor(currentInstr, null);
+                if (text) speakOnce(text);
             }
             return;
         }
 
         if (!targetAnnounced && dist <= ANNOUNCE_DISTANCE_METERS) {
             targetAnnounced = true;
-            speakOnce(phraseForInstruction(currentInstr, dist));
+            const text = textFor(currentInstr, dist);
+            if (text) speakOnce(text);
         } else if (!targetAnnounced) {
-            setStatusText(`${shortLabel(currentInstr)} · ${Math.round(dist)} m ahead`);
+            // Same wording as what WILL be spoken once in range — the status
+            // pill and the eventual announcement are never two different
+            // sentences for the same instruction.
+            const text = textFor(currentInstr, dist);
+            if (text) setStatusText(text);
         }
 
         if (dist <= PASS_THRESHOLD_METERS) {
@@ -400,6 +389,9 @@
             showWidget();
             setStatusText(enabled ? 'Voice guidance active' : 'Voice guidance muted');
             if (enabled) speak('Voice guidance active.');
+            // Next real location update (navLocationUpdate) will immediately
+            // find and display/speak the first upcoming instruction via
+            // handleLocationUpdate() — nothing further to do here.
         } else {
             hideWidget();
         }
