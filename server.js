@@ -2166,7 +2166,22 @@ app.post("/api/route", async (req, res) => {
             steps: (path.instructions || []).map(step => ({
               type: mapGHSignToORSType(step.sign),
               name: step.street_name || "",
-              distance: step.distance
+              distance: step.distance,
+              // ✅ FIX — GraphHopper calls this `interval`: [startIndex, endIndex]
+              // into the route's points array, marking exactly where this
+              // maneuver happens. This was being dropped entirely during the
+              // ORS-shape reshape above, so fetchORSRoute() on the client
+              // (which reads step.way_points[0] — the ORS-equivalent field
+              // name it already expects) always resolved every instruction's
+              // `location` to null. With no instruction ever having a
+              // location, voice-navigation.js's search for "the next
+              // instruction to measure distance against" ran off the end of
+              // the array on every location update and returned immediately —
+              // meaning it could never speak anything, no matter how far the
+              // user walked or how many turns they made. No client-side
+              // change needed: script.js was already reading the right field
+              // name, it just never received it.
+              way_points: Array.isArray(step.interval) ? step.interval : null
             }))
           }],
           summary: {
