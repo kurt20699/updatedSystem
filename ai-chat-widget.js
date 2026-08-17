@@ -130,6 +130,21 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
+        .ai-msg-action {
+            margin-top: 6px;
+            background: #fff;
+            color: #1e3a8a;
+            border: 1px solid #1e3a8a;
+            border-radius: 8px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .ai-msg-action:hover {
+            background: #1e3a8a;
+            color: #fff;
+        }
 
         /* ── Mobile overrides — MUST stay last so they win the cascade ── */
         @media (max-width: 768px) {
@@ -208,10 +223,105 @@
         chatWindow.classList.remove('open');
     });
 
-    function addMessage(text, role) {
+    // ── Navigate-button detection ───────────────────────────────
+    // Only looks for a location when the USER'S message actually reads as
+    // a navigation question — otherwise a building name mentioned in
+    // passing inside an unrelated answer could wrongly attach a button.
+    const NAV_INTENT_KEYWORDS = /\b(where'?s?|find|locate|location of|directions?|navigate|how (do|can) i get|take me|go to|way to)\b/i;
+
+    function escapeRegExp(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    // Reads the SAME live data + SAME permission check the map/search
+    // already use — never a second copy of building/room data, never a
+    // building the current role can't see (mirrors findRestrictedBuildingMention
+    // in server.js, which already keeps Gemini itself from describing those).
+    function findNavigableMatch(text) {
+        const session = (typeof getAuthSession === 'function') ? getAuthSession() : null;
+        const role = session?.role || 'VISITOR';
+        const campus = (typeof campusData !== 'undefined' && typeof state !== 'undefined' && state.currentCampus)
+            ? campusData[state.currentCampus]
+            : null;
+        if (!campus || !Array.isArray(campus.locations)) return null;
+
+        const lowerText = text.toLowerCase();
+        let best = null; // { kind: 'building'|'room', matchLength, building, room? }
+
+        campus.locations.forEach(building => {
+            if (typeof window.Permissions?.canAccessLocationType === 'function'
+                && !window.Permissions.canAccessLocationType(role, building.type)) {
+                return; // restricted for this role — can never match
+            }
+
+            [building.name, building.shortName].filter(Boolean).forEach(candidate => {
+                const pattern = new RegExp('\\b' + escapeRegExp(candidate.toLowerCase()) + '\\b');
+                if (pattern.test(lowerText) && (!best || candidate.length > best.matchLength)) {
+                    best = { kind: 'building', matchLength: candidate.length, building };
+                }
+            });
+
+            // Only object-shaped rooms with a real id/coords are navigable —
+            // some buildings (Registrar, Library, etc.) list rooms as plain
+            // name strings with no coordinates; those are skipped here, same
+            // as seed-from-campus-data.js already treats them as non-routable.
+            if (Array.isArray(building.rooms)) {
+                building.rooms.forEach(room => {
+                    if (typeof room !== 'object' || !room.name || room.id == null) return;
+                    const pattern = new RegExp('\\b' + escapeRegExp(room.name.toLowerCase()) + '\\b');
+                    if (pattern.test(lowerText) && (!best || room.name.length > best.matchLength)) {
+                        best = { kind: 'room', matchLength: room.name.length, building, room };
+                    }
+                });
+            }
+        });
+
+        return best;
+    }
+
+    // Builds { actionLabel, onAction } for addMessage() from a match, or
+    // null if there's nothing navigable to attach.
+    function buildNavigateAction(userText, replyText) {
+        if (!NAV_INTENT_KEYWORDS.test(userText)) return null;
+
+        const match = findNavigableMatch(`${userText}\n${replyText}`);
+        if (!match) return null;
+
+        return {
+            actionLabel: '🧭 Navigate',
+            onAction: () => {
+                // ✅ Reuses the EXACT existing trigger functions — same ones
+                // the map popups and search results already call. Neither
+                // function is duplicated or reimplemented here.
+                if (match.kind === 'room') {
+                    window.navigateToRoom?.(match.room.id, match.building.id);
+                } else {
+                    window.navigateToLocation?.(match.building.id);
+                }
+                chatWindow.classList.remove('open');
+            }
+        };
+    }
+
+    function addMessage(text, role, options = {}) {
         const div = document.createElement('div');
         div.className = `ai-msg ${role}`;
         div.textContent = text;
+
+        // ✅ Optional inline action (the Navigate button). Built as a real
+        // <button> appended after the text node — never innerHTML — so
+        // this can't introduce an XSS vector regardless of what text flows
+        // through it (destination names, AI reply text, etc.).
+        if (options.actionLabel && typeof options.onAction === 'function') {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ai-msg-action';
+            btn.textContent = options.actionLabel;
+            btn.addEventListener('click', options.onAction);
+            div.appendChild(document.createElement('br'));
+            div.appendChild(btn);
+        }
+
         messagesEl.appendChild(div);
         messagesEl.scrollTop = messagesEl.scrollHeight;
         return div;
@@ -242,7 +352,15 @@
             loadingEl.remove();
 
             if (data.ok && data.reply) {
-                addMessage(data.reply, 'bot');
+                // ✅ Attach a Navigate action only when the user's question
+                // read as a navigation ask AND the named building/room is
+                // real, currently loaded, and permitted for this role.
+                // Restricted-building denial replies never match here,
+                // since findNavigableMatch() only searches locations the
+                // role can already access — the same building the denial
+                // message names is deliberately excluded from that search.
+                const action = buildNavigateAction(text, data.reply);
+                addMessage(data.reply, 'bot', action || {});
             } else {
                 addMessage(data.error || "Sorry, something went wrong. Please try again.", 'bot');
             }
