@@ -1128,6 +1128,71 @@ app.post("/api/routes/record", async (req, res) => {
     }
 });
 
+// ── Campus Weather ──────────────────────────────────────────────
+// Iba Campus coordinates — matches campusData.iba.center in campus-data.js.
+const WEATHER_LOCATION = { lat: 15.318547, lng: 119.98376 };
+
+// WMO weather codes (the standard Open-Meteo uses) → icon + human label.
+function mapWeatherCode(code) {
+  if (code === 0 || code === 1) return { icon: "☀️", condition: "Mostly Sunny" };
+  if (code === 2) return { icon: "⛅", condition: "Partly Cloudy" };
+  if (code === 3) return { icon: "☁️", condition: "Cloudy" };
+  if (code === 45 || code === 48) return { icon: "🌫️", condition: "Foggy" };
+  if ([51, 53, 55, 56, 57].includes(code)) return { icon: "🌦️", condition: "Light Rain" };
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return { icon: "🌧️", condition: "Rainy" };
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return { icon: "❄️", condition: "Snow" };
+  if ([95, 96, 99].includes(code)) return { icon: "⛈️", condition: "Thunderstorm" };
+  return { icon: "⛅", condition: "Partly Cloudy" }; // safe fallback for any code not explicitly handled
+}
+
+// Open-Meteo needs no API key, but there's no reason to re-fetch on every
+// single client poll — weather is effectively unchanged for several
+// minutes at a time. A short in-memory cache also means a slow/failed
+// upstream call can still serve the last good reading instead of an error.
+let weatherCache = { data: null, fetchedAt: 0 };
+const WEATHER_CACHE_MS = 5 * 60 * 1000; // 5 minutes
+
+app.get("/api/weather", async (_req, res) => {
+  const now = Date.now();
+  if (weatherCache.data && (now - weatherCache.fetchedAt) < WEATHER_CACHE_MS) {
+    return res.json(weatherCache.data);
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${WEATHER_LOCATION.lat}&longitude=${WEATHER_LOCATION.lng}&current=temperature_2m,weather_code&timezone=auto`;
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    const data = await response.json();
+
+    if (!response.ok || !data.current || typeof data.current.temperature_2m !== "number") {
+      throw new Error(data.reason || "Weather provider returned no current data.");
+    }
+
+    const { icon, condition } = mapWeatherCode(data.current.weather_code);
+    const payload = {
+      ok: true,
+      temperatureC: data.current.temperature_2m,
+      condition,
+      icon,
+      location: "Iba Campus",
+      updatedAt: data.current.time || new Date().toISOString()
+    };
+
+    weatherCache = { data: payload, fetchedAt: now };
+    return res.json(payload);
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.warn("Weather fetch failed:", err.message);
+    // Graceful degradation — serve the last known-good reading rather than
+    // a hard error, if one exists, even though it's past its cache window.
+    if (weatherCache.data) return res.json(weatherCache.data);
+    return res.status(503).json({ ok: false, error: "Weather data is temporarily unavailable." });
+  }
+});
+
 
 // ── ROUTE HISTORY: Get count for a user ──
 app.get("/api/routes/count/:userId", async (req, res) => {

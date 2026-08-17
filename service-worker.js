@@ -13,6 +13,7 @@ const APP_SHELL = [
     './location-filter.js',
     './campus-tips.js',
     './voice-navigation.js',
+    './weather-widget.js',
 ];
 
 // Install - cache app shell

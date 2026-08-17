@@ -602,6 +602,67 @@ body {
     padding: 0 2px;
 }
 
+/* ── Campus Weather card ── */
+.campus-weather-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, #e8f0fe 0%, #f5f9ff 100%);
+    border-left: 5px solid #2c5aa0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    box-sizing: border-box;
+}
+.campus-weather-card .weather-icon {
+    font-size: 30px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.campus-weather-card .weather-info {
+    min-width: 0; /* allows text to wrap/truncate instead of overflowing the card */
+}
+.campus-weather-card .weather-temp {
+    font-size: 18px;
+    font-weight: 700;
+    color: #14304f;
+    line-height: 1.2;
+}
+.campus-weather-card .weather-location {
+    font-size: 12px;
+    font-weight: 600;
+    color: #2c5aa0;
+    margin-top: 1px;
+}
+.campus-weather-card .weather-condition {
+    font-size: 12px;
+    color: #4f5f73;
+    margin-top: 1px;
+    word-wrap: break-word;
+}
+.campus-weather-card.weather-error {
+    border-left-color: #dc2626;
+}
+.campus-weather-card.weather-error .weather-condition {
+    color: #991b1b;
+}
+
+@media (max-width: 480px) {
+    .campus-weather-card {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+    .campus-weather-card .weather-icon {
+        font-size: 26px;
+    }
+    .campus-weather-card .weather-temp {
+        font-size: 16px;
+    }
+    .campus-weather-card .weather-condition {
+        font-size: 11px;
+    }
+}
+
 /* ── Campus Tips card (mirrors .alert-banner sizing/spacing) ── */
 .campus-tips-card {
     background: #fff8e1;

@@ -235,6 +235,16 @@
                     <div class="main-container">
                         <!-- Sidebar -->
                         <aside class="sidebar" id="sidebar">
+                            <!-- Campus Weather card -->
+                            <div id="campusWeatherCard" class="campus-weather-card" aria-live="polite">
+                                <div class="weather-icon" id="weatherIcon">⏳</div>
+                                <div class="weather-info">
+                                    <div class="weather-temp" id="weatherTemp">--°C</div>
+                                    <div class="weather-location">Iba Campus</div>
+                                    <div class="weather-condition" id="weatherCondition">Loading weather…</div>
+                                </div>
+                            </div>
+
                             <!-- Campus Alerts / Campus Tips tabs -->
                             <div id="alertsTipsTabs" class="alerts-tips-tabs">
                                 <button type="button" class="alerts-tips-tab active" data-tab="alerts">Campus Alerts</button>
@@ -662,6 +672,7 @@
         <script src="campus-tips.js" defer></script>
         <script src="script.js?v=6"></script>
         <script src="voice-navigation.js" defer></script>
+        <script src="weather-widget.js" defer></script>
         <script src="ai-chat-widget.js" defer></script>
         <script src="employee-announcement-widget.js" defer></script>
         
