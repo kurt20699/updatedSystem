@@ -37,7 +37,9 @@
         <section id="authScreen" class="auth-screen">
             <div class="auth-card">
                 <div class="auth-brand">
-                    <div class="auth-brand-icon">🎓</div>
+                    <div class="auth-brand-icon">
+                        <img src="images/system/prmsu-seal.png" alt="PRMSU Seal" class="auth-brand-icon-img">
+                    </div>
                     <h1>PRMSU Smart Campus Navigator</h1>
                     <p>Sign in to continue to the campus navigation system.</p>
                 </div>
@@ -45,7 +47,6 @@
                 <div class="auth-tabs">
                     <button class="auth-tab-btn active" data-auth-tab="login">Login</button>
                     <button class="auth-tab-btn" data-auth-tab="register">Register</button>
-                    <button class="auth-tab-btn" data-auth-tab="forgot">Forgot Password</button>
                 </div>
     
                 <form id="loginForm" class="auth-form">
@@ -55,15 +56,16 @@
                         <option value="userId">User ID</option>
                     </select>
                     <label class="auth-label" for="loginEmail" id="loginIdentifierLabel">Email</label>
-                    <input id="loginEmail" type="text" class="auth-input" placeholder="Enter your email" required>
+                    <input id="loginEmail" type="text" class="auth-input" placeholder="you@prmsu.edu.ph" required>
                     <label class="auth-label" for="loginPassword">Password</label>
                     <div style="position:relative;">
                         <input id="loginPassword" type="password" class="auth-input" placeholder="Enter your password" required style="padding-right:44px; width:100%;">
-                        <button type="button" onclick="togglePassword('loginPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#6b7f8e; display:flex; align-items:center;">
+                        <button type="button" onclick="togglePassword('loginPassword', this)" aria-label="Show password" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#6b7f8e; display:flex; align-items:center;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         </button>
                     </div>
-                    <button type="submit" class="btn-primary auth-submit-btn">Login</button>
+                    <button type="button" class="auth-forgot-link" onclick="switchAuthTab('forgot')">Forgot password?</button>
+                    <button type="submit" class="btn-primary auth-submit-btn" id="loginSubmitBtn">Login</button>
                 </form>
     
                 <form id="registerForm" class="auth-form hidden">
@@ -89,7 +91,7 @@
                 <label class="auth-label" for="registerPassword">Password</label>
                     <div style="position:relative;">
                         <input id="registerPassword" type="password" class="auth-input" placeholder="Create password" required style="padding-right:44px; width:100%;">
-                        <button type="button" onclick="togglePassword('registerPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#6b7f8e; display:flex; align-items:center;">
+                        <button type="button" onclick="togglePassword('registerPassword', this)" aria-label="Show password" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#6b7f8e; display:flex; align-items:center;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         </button>
                     </div>
@@ -103,7 +105,7 @@
                 <label class="auth-label" for="registerConfirmPassword">Confirm Password</label>
                     <div style="position:relative;">
                         <input id="registerConfirmPassword" type="password" class="auth-input" placeholder="Confirm password" required style="padding-right:44px; width:100%;">
-                        <button type="button" onclick="togglePassword('registerConfirmPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#6b7f8e; display:flex; align-items:center;">
+                        <button type="button" onclick="togglePassword('registerConfirmPassword', this)" aria-label="Show password" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#6b7f8e; display:flex; align-items:center;">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         </button>
                     </div>
@@ -149,7 +151,7 @@
                         <label class="auth-label" for="forgotNewPassword">New Password</label>
                         <div style="position:relative;">
                             <input id="forgotNewPassword" type="password" class="auth-input" placeholder="Enter new password" required style="padding-right:44px; width:100%;">
-                            <button type="button" onclick="togglePassword('forgotNewPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#6b7f8e; display:flex; align-items:center;">
+                            <button type="button" onclick="togglePassword('forgotNewPassword', this)" aria-label="Show password" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#6b7f8e; display:flex; align-items:center;">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                             </button>
                         </div>
@@ -163,7 +165,7 @@
                         <label class="auth-label" for="forgotConfirmPassword">Confirm Password</label>
                         <div style="position:relative;">
                             <input id="forgotConfirmPassword" type="password" class="auth-input" placeholder="Confirm new password" required style="padding-right:44px; width:100%;">
-                            <button type="button" onclick="togglePassword('forgotConfirmPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#6b7f8e; display:flex; align-items:center;">
+                            <button type="button" onclick="togglePassword('forgotConfirmPassword', this)" aria-label="Show password" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:4px; color:#6b7f8e; display:flex; align-items:center;">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                             </button>
                         </div>
@@ -191,7 +193,7 @@
             <div class="loading-content">
                 <div class="logo-container">        
                     <div class="logo-circle">
-                        <span class="logo-icon">🎓</span>
+                        <img src="images/system/prmsu-seal.png" alt="PRMSU Seal" class="auth-brand-icon-img">
                     </div>
                 </div>
                 <h1 class="loading-title">PRMSU Smart Campus Navigator</h1>

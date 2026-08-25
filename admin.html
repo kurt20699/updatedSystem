@@ -619,7 +619,6 @@
   .logo-circle {
       width: 120px;
       height: 120px;
-      background: rgba(255, 255, 255, 0.2);
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -628,9 +627,14 @@
       animation: pulse 2s ease-in-out infinite;
       backdrop-filter: blur(10px);
       border: 3px solid rgba(255, 255, 255, 0.3);
+      padding: 8px;
+      box-sizing: border-box;
   }
-  .logo-icon {
-      font-size: 60px;
+  .logo-icon-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 50%;
   }
   @keyframes pulse {
       0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4); }
@@ -679,7 +683,7 @@
       <div class="loading-content">
           <div class="logo-container">
               <div class="logo-circle">
-                  <span class="logo-icon">🎓</span>
+                  <img src="images/system/prmsu-seal.png" alt="PRMSU Seal" class="logo-icon-img">
               </div>
           </div>
           <h1 class="loading-title">PRMSU Admin Dashboard</h1>

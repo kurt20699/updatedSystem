@@ -3132,30 +3132,34 @@ path.dotted-end-line {
 }
 
 .auth-brand-icon {
-    width: 56px;
-    height: 56px;
-    border-radius: 14px;
-    margin: 0 auto 10px;
+    width: 72px;
+    height: 72px;
+    margin: 0 auto 8px;
     display: grid;
     place-items: center;
-    font-size: 26px;
-    background: #edf5ff;
+}
+
+.auth-brand-icon-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 .auth-brand h1 {
-    font-size: 22px;
-    margin-bottom: 6px;
+    font-size: 21px;
+    margin-bottom: 4px;
     color: #123c56;
 }
 
 .auth-brand p {
-    font-size: 13px;
-    color: #56657a;
+    font-size: 12.5px;
+    font-weight: 400;
+    color: #7c8aa0;
 }
 
 .auth-tabs {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     margin-bottom: 16px;
 }
@@ -3169,6 +3173,12 @@ path.dotted-end-line {
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.auth-tab-btn:hover {
+    background: #eef4fb;
+    border-color: #c3d5e8;
 }
 
 .auth-tab-btn.active {
@@ -3176,6 +3186,11 @@ path.dotted-end-line {
     color: #fff;
     border-color: var(--primary-blue);
 }
+
+/* Forgot Password stays a real tab (nothing about the auth flow changes)
+   but reads as the lowest-priority of the three by default — the "or
+   forgot your password?" link near the password field (added below) is
+   now the primary way most users reach it. */
 
 .auth-form {
     display: flex;
@@ -3197,10 +3212,15 @@ path.dotted-end-line {
     font-size: 14px;
 }
 
+.auth-input:focus,
 .auth-input:focus-visible,
 .auth-tab-btn:focus-visible {
     outline: 3px solid rgba(44, 90, 160, 0.2);
     outline-offset: 2px;
+}
+
+.auth-input:focus {
+    border-color: var(--primary-blue);
 }
 
 .auth-select {
@@ -3578,20 +3598,59 @@ button,
 .btn-visitor-guest {
     width: 100%;
     padding: 11px 16px;
-    border: 1.5px solid #2c5aa0;
+    border: 1.5px solid #d7dfe9;
     border-radius: 10px;
     background: transparent;
-    color: #2c5aa0;
+    color: #45536a;
     font-size: 14px;
     font-weight: 600;
     font-family: inherit;
     cursor: pointer;
-    transition: background 0.18s, color 0.18s;
+    transition: background 0.18s, color 0.18s, border-color 0.18s;
 }
 
 .btn-visitor-guest:hover {
-    background: #2c5aa0;
-    color: #fff;
+    background: #f4f7fb;
+    border-color: #b9c6d6;
+    color: #2c5aa0;
+}
+
+/* Inline "Forgot password?" link under the password field — same
+   destination as the Forgot Password tab (switchAuthTab('forgot')),
+   just a faster, lower-friction path than hunting for the tab. */
+.auth-forgot-link {
+    align-self: flex-end;
+    background: none;
+    border: none;
+    padding: 0;
+    margin-top: -2px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--primary-blue);
+    cursor: pointer;
+    text-decoration: none;
+}
+.auth-forgot-link:hover {
+    text-decoration: underline;
+}
+
+/* Login button loading state */
+.auth-submit-btn:disabled {
+    opacity: 0.75;
+    cursor: not-allowed;
+    transform: none !important;
+}
+.auth-spinner {
+    width: 15px;
+    height: 15px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: authSpin 0.7s linear infinite;
+    display: inline-block;
+}
+@keyframes authSpin {
+    to { transform: rotate(360deg); }
 }
 
 .visitor-checkin-hint {
