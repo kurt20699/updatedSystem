@@ -1956,10 +1956,24 @@
         return;
       }
 
+      // ✅ Same role → ID-type mapping as the registration form itself
+      // (registerRole → "Upload Student ID"/"Upload Employee ID" in
+      // script.js) — one small helper instead of repeating the ternary
+      // inline, so the two can't quietly drift apart later.
+      const idDocumentLabelFor = (role) => {
+        const r = String(role || '').toUpperCase();
+        if (r === 'STUDENT') return '🪪 Student ID';
+        if (r === 'EMPLOYEE') return '🪪 Employee ID';
+        return '🪪 ID Document';
+      };
+
       if (list) list.innerHTML = allPendingUsers.map(u => `
         <div style="display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:10px;background:#fafcfe;">
-          <img src="${u.id_document}" alt="ID" onclick="previewId('${u.id_document.replace(/'/g, "\\'")}')"
-            style="width:64px;height:44px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border);flex-shrink:0;">
+          <div style="flex-shrink:0;text-align:center;">
+            <img src="${u.id_document}" alt="${idDocumentLabelFor(u.role)}" onclick="previewId('${u.id_document.replace(/'/g, "\\'")}')"
+              style="width:64px;height:44px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border);display:block;">
+            <div style="font-size:10px;color:var(--muted);margin-top:3px;white-space:nowrap;">${idDocumentLabelFor(u.role)}</div>
+          </div>
           <div style="flex:1;min-width:0;">
             <div style="font-weight:700;font-size:13px;">${escHtml(u.full_name)}</div>
             <div style="font-size:12px;color:var(--muted);">${escHtml(u.email)} · <span class="role-badge role-${(u.role||'').toLowerCase()}">${escHtml(u.role)}</span></div>

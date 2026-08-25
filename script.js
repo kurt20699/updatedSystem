@@ -1328,6 +1328,9 @@ function setupAuthHandlers() {
     const loginIdentifierLabel = document.getElementById('loginIdentifierLabel');
     const loginIdentifierInput = document.getElementById('loginEmail');
     const registerForm = document.getElementById('registerForm');
+    const registerRoleSelect = document.getElementById('registerRole');
+    const registerIdDocumentLabel = document.getElementById('registerIdDocumentLabel');
+    const registerIdDocumentHint = document.getElementById('registerIdDocumentHint');
     const forgotStep1 = document.getElementById('forgotStep1');
     const forgotStep2 = document.getElementById('forgotStep2');
     const forgotStep3 = document.getElementById('forgotStep3');
@@ -1387,6 +1390,29 @@ function setupAuthHandlers() {
 
     loginIdentifierType?.addEventListener('change', refreshLoginIdentifier);
     refreshLoginIdentifier();
+
+    // ✅ Registration ID field label stays in sync with the selected role —
+    // same "refresh on change + call once on load" pattern as
+    // refreshLoginIdentifier() above. The role <select> is the single
+    // source of truth: this only ever reads registerRoleSelect.value, so
+    // the label can never drift out of sync with what will actually be
+    // submitted as `role` in the /api/auth/register request below.
+    const refreshRegisterIdLabel = () => {
+        const selectedRole = registerRoleSelect?.value || '';
+        if (!registerIdDocumentLabel) return;
+        if (selectedRole === 'student') {
+            registerIdDocumentLabel.textContent = 'Upload Student ID';
+            if (registerIdDocumentHint) registerIdDocumentHint.textContent = '📎 Upload a clear photo of your Student ID. Your account stays pending until an Admin verifies it.';
+        } else if (selectedRole === 'employee') {
+            registerIdDocumentLabel.textContent = 'Upload Employee ID';
+            if (registerIdDocumentHint) registerIdDocumentHint.textContent = '📎 Upload a clear photo of your Employee ID. Your account stays pending until an Admin verifies it.';
+        } else {
+            registerIdDocumentLabel.textContent = 'Student ID / Employee ID';
+            if (registerIdDocumentHint) registerIdDocumentHint.textContent = '📎 Select your role above, then upload a clear photo of your ID. Your account stays pending until an Admin verifies it.';
+        }
+    };
+    registerRoleSelect?.addEventListener('change', refreshRegisterIdLabel);
+    refreshRegisterIdLabel();
 
     // SMS DISABLED — identifier field is always email now
     const refreshForgotIdentifier = () => {
