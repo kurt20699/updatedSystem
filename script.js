@@ -1858,8 +1858,17 @@ try {
             coords: (dbB.lat && dbB.lng) ? [parseFloat(dbB.lat), parseFloat(dbB.lng)] : (existing?.coords || null),
             rooms: existing?.rooms || [],
             labelOffset: existing?.labelOffset || [0, 0],
-            image: existing?.image || null,
-            photo: existing?.photo || null,   // ← ADD — populateBuildingPanel() filters on this field specifically
+            // ✅ DB-uploaded image (Admin Dashboard → Manage Buildings) now
+            // takes priority when present. Falls back to whatever was
+            // already loaded (the hardcoded campus-data.js default) when the
+            // admin hasn't uploaded one — this is what keeps the existing
+            // default/placeholder behavior intact for every other building.
+            // Both `image` (map popup, buildLocationPopupHTML) and `photo`
+            // (populateBuildingPanel's gallery) are kept in sync with the
+            // SAME uploaded value, matching how campus-data.js already
+            // always sets both fields to the same path for a given building.
+            image: dbB.image_url || existing?.image || null,
+            photo: dbB.image_url || existing?.photo || null,
             tourPhotos: existing?.tourPhotos || [],
             description: dbB.description || existing?.description || null,
             footprint: Array.isArray(dbB.footprint) && dbB.footprint.length >= 3 ? dbB.footprint : (existing?.footprint || null),

@@ -950,6 +950,28 @@
               <input id="buildingShortName" class="form-input" type="text" placeholder="e.g. COE">
             </div>
           </div>
+
+          <!-- ── BUILDING IMAGE ── -->
+          <div class="building-action-card">
+            <div class="building-action-header">
+              <div class="building-action-icon">🖼️</div>
+              <div class="building-action-text">
+                <div class="building-action-title">Building Image</div>
+                <div class="building-action-desc">Shown to users when they click this building's label on the map. JPG/PNG, up to 4MB.</div>
+              </div>
+            </div>
+            <div style="display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; margin-top:6px;">
+              <div id="buildingImagePreviewWrap" style="width:160px; max-width:100%; height:120px; border-radius:10px; border:1.5px solid var(--border); overflow:hidden; flex-shrink:0; display:flex; align-items:center; justify-content:center; background:#f8fafc; color:var(--muted); font-size:12px; text-align:center;">
+                No image uploaded
+              </div>
+              <div style="display:flex; flex-direction:column; gap:8px; min-width:160px; flex:1;">
+                <input type="file" id="buildingImageInput" accept="image/*" onchange="handleBuildingImageSelect(this)" style="display:none;">
+                <button type="button" class="btn-action-secondary" onclick="document.getElementById('buildingImageInput').click()">📤 Upload / Replace Image</button>
+                <button type="button" class="btn-action-secondary" id="btnRemoveBuildingImage" onclick="removeBuildingImage()" style="display:none; color:#dc2626;">🗑️ Remove Image</button>
+              </div>
+            </div>
+          </div>
+
           <div class="form-group">
             <label>Description (optional)</label>
             <textarea id="buildingDescription" class="form-textarea" placeholder="Brief description of the building shown in its details popup"></textarea>
@@ -3023,6 +3045,7 @@
 
   let footprintPickerMap = null;
   let footprintPoints = []; // [[lat,lng], ...]
+  let buildingImageDataUrl = null; // base64 data URL of the staged/current building image, or null — always resent on save, same convention as footprint_height/description
   let footprintMarkers = [];
 
   function toggleFootprintDrawer() {
@@ -3279,6 +3302,9 @@
     footprintPoints = [];
     document.getElementById('buildingFootprintHeight').value = 4;
     document.getElementById('footprintStatus').textContent = 'No footprint drawn yet.';
+    buildingImageDataUrl = null;
+    document.getElementById('buildingImageInput').value = '';
+    renderBuildingImagePreview();
     document.getElementById('btnSaveBuilding').innerHTML = '➕ Add Building';
     formWrap.style.display = 'flex';
     if (buildingPickerMap) { buildingPickerMap.remove(); buildingPickerMap = null; buildingPickerMarker = null; }
@@ -3311,6 +3337,14 @@
     document.getElementById('buildingFootprintHeight').value = b.footprint_height != null ? b.footprint_height : 4;
     document.getElementById('footprintStatus').textContent =
       footprintPoints.length >= 3 ? `${footprintPoints.length}-point footprint saved. Click "Draw Footprint" to view/edit.` : 'No footprint drawn yet.';
+
+    // ✅ Each building's image comes straight from ITS OWN row (b.image_url)
+    // — there is no shared/global variable involved, so switching between
+    // editing different buildings can never leak one building's image onto
+    // another's form.
+    buildingImageDataUrl = b.image_url || null;
+    document.getElementById('buildingImageInput').value = '';
+    renderBuildingImagePreview();
 
     document.getElementById('btnSaveBuilding').innerHTML = '💾 Save Changes';
     document.getElementById('buildingFormWrap').style.display = 'flex';
@@ -3371,7 +3405,8 @@
         body: JSON.stringify({
           name, short_name, type, lat, lng, description,
           footprint: footprintPoints.length >= 3 ? getOrderedFootprintPoints(footprintPoints) : null,
-          footprint_height: isNaN(footprint_height) ? 4 : footprint_height
+          footprint_height: isNaN(footprint_height) ? 4 : footprint_height,
+          image_url: buildingImageDataUrl
         })
       });
       const data = await res.json();
@@ -3382,6 +3417,54 @@
       loadStats();
     } catch(err) { showToast(err.message, 'error'); }
     finally { btn.disabled = false; }
+  }
+
+  // Renders whatever buildingImageDataUrl currently holds (existing image,
+  // a newly-picked file's preview, or nothing) — called after every state
+  // change so the preview and the Remove button always agree with what
+  // will actually be sent on save.
+  function renderBuildingImagePreview() {
+    const wrap = document.getElementById('buildingImagePreviewWrap');
+    const removeBtn = document.getElementById('btnRemoveBuildingImage');
+    if (buildingImageDataUrl) {
+      wrap.innerHTML = `<img src="${buildingImageDataUrl}" alt="Building preview" style="width:100%;height:100%;object-fit:cover;display:block;">`;
+      removeBtn.style.display = '';
+    } else {
+      wrap.innerHTML = 'No image uploaded';
+      removeBtn.style.display = 'none';
+    }
+  }
+
+  // Same pattern as uploadProfilePhoto() above — client-side size/type
+  // check, FileReader → base64 data URL, held in memory (not uploaded yet)
+  // until the Admin actually clicks Add/Save Changes. This means picking a
+  // new image doesn't touch the database until the rest of the form is
+  // also ready to save, and Cancel discards it along with everything else.
+  function handleBuildingImageSelect(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Please choose an image file.', 'error');
+      input.value = '';
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      showToast('Image too large (max 4MB)', 'error');
+      input.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      buildingImageDataUrl = e.target.result;
+      renderBuildingImagePreview();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeBuildingImage() {
+    buildingImageDataUrl = null;
+    document.getElementById('buildingImageInput').value = '';
+    renderBuildingImagePreview();
   }
 
   function deleteBuilding(id, name) {

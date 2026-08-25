@@ -2429,40 +2429,30 @@ app.delete('/api/admin/trees/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// Shared cap for building images — same 4MB limit and pattern already used
+// for ID-document uploads (see /api/auth/register): a base64 data URL
+// string stored directly in a TEXT column, no separate file storage.
+function validateBuildingImage(image_url) {
+  if (image_url == null || image_url === '') return null; // no image — perfectly valid, keeps default/placeholder behavior
+  if (typeof image_url !== 'string' || !image_url.startsWith('data:image/')) {
+    throw new Error('Building image must be an uploaded image file.');
+  }
+  if (image_url.length > 4 * 1024 * 1024) {
+    throw new Error('Building image is too large. Please upload a file under 4MB.');
+  }
+  return image_url;
+}
+
 // POST add a building
 app.post('/api/admin/buildings', requireAdmin, async (req, res) => {
-  const { name, short_name, type, lat, lng, footprint, footprint_height, description } = req.body;
+  const { name, short_name, type, lat, lng, footprint, footprint_height, description, image_url } = req.body;
   if (!name || !short_name) return res.status(400).json({ ok: false, error: 'name and short_name required' });
   try {
+    const safeImage = validateBuildingImage(image_url);
     const result = await pool.query(
       `INSERT INTO buildings
-        (name, short_name, type, lat, lng, footprint, footprint_color, footprint_opacity, footprint_height, description)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [
-        name, short_name, type || 'department', lat || null, lng || null,
-        footprint && footprint.length >= 3 ? JSON.stringify(footprint) : null,
-        '#d1cdc7',
-        1,
-        footprint_height != null ? footprint_height : 4,
-        description ? description.trim() : null
-      ]
-    );
-    broadcastMapDataChanged(); // ✅ ADD — push instant "building added" to every open tab
-    res.json({ ok: true, building: result.rows[0] });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// PUT edit a building
-app.put('/api/admin/buildings/:id', requireAdmin, async (req, res) => {
-  const { name, short_name, type, lat, lng, footprint, footprint_height, description } = req.body;
-  try {
-    const result = await pool.query(
-      `UPDATE buildings
-      SET name=$1, short_name=$2, type=$3, lat=$4, lng=$5,
-          footprint=$6, footprint_color=$7, footprint_opacity=$8, footprint_height=$9, description=$10
-       WHERE id=$11 RETURNING *`,
+        (name, short_name, type, lat, lng, footprint, footprint_color, footprint_opacity, footprint_height, description, image_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [
         name, short_name, type || 'department', lat || null, lng || null,
         footprint && footprint.length >= 3 ? JSON.stringify(footprint) : null,
@@ -2470,13 +2460,41 @@ app.put('/api/admin/buildings/:id', requireAdmin, async (req, res) => {
         1,
         footprint_height != null ? footprint_height : 4,
         description ? description.trim() : null,
+        safeImage
+      ]
+    );
+    broadcastMapDataChanged(); // ✅ ADD — push instant "building added" to every open tab
+    res.json({ ok: true, building: result.rows[0] });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// PUT edit a building
+app.put('/api/admin/buildings/:id', requireAdmin, async (req, res) => {
+  const { name, short_name, type, lat, lng, footprint, footprint_height, description, image_url } = req.body;
+  try {
+    const safeImage = validateBuildingImage(image_url); // null clears/removes the image — same as any other resent field
+    const result = await pool.query(
+      `UPDATE buildings
+      SET name=$1, short_name=$2, type=$3, lat=$4, lng=$5,
+          footprint=$6, footprint_color=$7, footprint_opacity=$8, footprint_height=$9, description=$10, image_url=$11
+       WHERE id=$12 RETURNING *`,
+      [
+        name, short_name, type || 'department', lat || null, lng || null,
+        footprint && footprint.length >= 3 ? JSON.stringify(footprint) : null,
+        '#d1cdc7',
+        1,
+        footprint_height != null ? footprint_height : 4,
+        description ? description.trim() : null,
+        safeImage,
         req.params.id
       ]
     );
     broadcastMapDataChanged(); // ✅ ADD — push instant "building updated" to every open tab
     res.json({ ok: true, building: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(400).json({ ok: false, error: err.message });
   }
 });
 
